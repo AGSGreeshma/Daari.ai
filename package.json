@@ -5,7 +5,6 @@
   "description": "Voice guide that points at the next step on any website, and never clicks for you.",
   "license": "MIT",
   "scripts": {
-    "dev": "vercel dev",
     "deploy": "vercel --prod"
   }
 }

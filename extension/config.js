@@ -10,5 +10,5 @@
 // extension, so anyone who installs Daari can read it.
 
 window.DAARI_CONFIG = {
-  API_BASE: "http://localhost:3000"   // <-- EDIT THIS ONE LINE
+  API_BASE: "https://daari-ai.vercel.app"  // <-- EDIT THIS ONE LINE
 };
