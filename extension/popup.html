@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Daari</title>
+  <style>
+    /* Big text and big buttons everywhere in Daari -- our users are
+       elderly or new to computers, so nothing is small or subtle. */
+    body {
+      width: 300px;
+      margin: 0;
+      padding: 18px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #fffdf7;
+      color: #2b2b2b;
+    }
+    h1     { margin: 0 0 2px; font-size: 22px; }
+    .sub   { margin: 0 0 16px; font-size: 13px; color: #6b6b6b; }
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      font-family: inherit;
+      border: 0;
+      border-radius: 8px;
+      background: #1f6f4a;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { background: #9ab5a7; cursor: default; }
+    #result {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.45;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #result.good { display: block; background: #e6f5ec; border: 1px solid #1f6f4a; }
+    #result.bad  { display: block; background: #fdecea; border: 1px solid #b3261e; }
+    .url { margin-top: 12px; font-size: 11px; color: #8a8a8a; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Daari</h1>
+  <p class="sub">Phase 0 &mdash; setup check</p>
+
+  <button id="test">Test connection</button>
+  <div id="result"></div>
+  <p class="url" id="url"></p>
+
+  <!-- config.js must load first: popup.js reads the URL from it. -->
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
