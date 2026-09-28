@@ -1,0 +1,249 @@
+/* Daari landing page.
+
+   Written for someone who is not sure whether to trust this, reading on a laptop
+   or a phone. So: generous type, short lines, nothing that moves, and the scary
+   Chrome warning answered on the page rather than hidden from it. */
+
+:root {
+  color-scheme: light dark;
+  --surface: #fffdf7;
+  --raised: #ffffff;
+  --line: #e4e0d6;
+  --ink: #23262a;
+  --ink-2: #55534d;
+  --ink-3: #85827a;
+
+  --maroon: #7a1f2b;
+  --orange: #c25a00;
+  --green: #0f7a45;
+  --warn-bg: #fff8e1;
+  --warn-line: #a2620b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #17171a;
+    --raised: #1f1f23;
+    --line: #34343a;
+    --ink: #f2f1ec;
+    --ink-2: #b8b5ad;
+    --ink-3: #8a877f;
+
+    --maroon: #d98b96;
+    --orange: #ff9d3d;
+    --green: #35a06a;
+    --warn-bg: #2a2416;
+    --warn-line: #bd8a32;
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #17171a;
+  --raised: #1f1f23;
+  --line: #34343a;
+  --ink: #f2f1ec;
+  --ink-2: #b8b5ad;
+  --ink-3: #8a877f;
+  --maroon: #d98b96;
+  --orange: #ff9d3d;
+  --green: #35a06a;
+  --warn-bg: #2a2416;
+  --warn-line: #bd8a32;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "Nirmala UI", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+
+a { color: var(--maroon); }
+
+/* ---------- hero ---------- */
+.hero {
+  padding: 56px 0 48px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(194, 90, 0, 0.055), transparent);
+}
+.name {
+  margin: 0 0 14px;
+  font-size: 15px;
+  letter-spacing: 1.2px;
+  color: var(--maroon);
+  font-weight: 600;
+}
+h1 {
+  margin: 0 0 20px;
+  font-size: 34px;
+  line-height: 1.24;
+  letter-spacing: -0.4px;
+  font-weight: 600;
+}
+h1 em { font-style: normal; color: var(--orange); }
+.lede { margin: 0 0 26px; font-size: 19px; color: var(--ink-2); }
+.lede strong { color: var(--ink); }
+
+.cta-row { display: flex; gap: 11px; flex-wrap: wrap; margin: 0 0 12px; }
+.cta {
+  display: inline-block;
+  padding: 14px 26px;
+  border-radius: 10px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cta:hover { background: #a54c00; }
+.cta-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 2px solid var(--line);
+}
+.cta-ghost:hover { border-color: var(--ink-3); background: var(--raised); }
+
+/* ---------- sections ---------- */
+section { padding: 42px 0; border-bottom: 1px solid var(--line); }
+h2 { font-size: 25px; margin: 0 0 16px; letter-spacing: -0.2px; }
+h3 { font-size: 18px; margin: 0 0 7px; }
+p { margin: 0 0 16px; }
+.section-lede { color: var(--ink-2); }
+.fine { font-size: 14px; color: var(--ink-3); }
+
+.stat {
+  padding: 15px 18px;
+  background: var(--raised);
+  border-left: 4px solid var(--maroon);
+  border-radius: 6px;
+  font-size: 18px;
+}
+/* A visible reminder, not a footnote. Better an ugly marker on a draft than a
+   citation nobody checked on a page a judge reads. */
+.verify {
+  display: block;
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--warn-line);
+  background: var(--warn-bg);
+  padding: 6px 9px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.pull {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--ink);
+  border-left: 4px solid var(--orange);
+  padding-left: 18px;
+  margin: 26px 0 0;
+}
+
+/* ---------- how it works ---------- */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; }
+.step {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+}
+.step-n {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--orange);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px;
+  margin-bottom: 11px;
+}
+.step p { margin: 0; font-size: 15.5px; color: var(--ink-2); }
+
+/* ---------- promises ---------- */
+.promises { display: grid; gap: 14px; }
+.promise {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  padding: 17px 19px;
+}
+.promise h3 { color: var(--green); }
+.promise p { margin: 0; font-size: 15.5px; color: var(--ink-2); }
+
+/* ---------- the Chrome warning ---------- */
+.warning-section {
+  background: var(--warn-bg);
+  border-top: 2px solid var(--warn-line);
+  border-bottom: 2px solid var(--warn-line);
+  margin-top: -1px;
+}
+.chrome-warning {
+  display: block;
+  margin: 12px 0;
+  padding: 13px 16px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 17px;
+}
+ul.plain { margin: 0 0 16px; padding-left: 22px; }
+ul.plain li { margin-bottom: 8px; }
+
+/* ---------- the numbers, injected by npm run numbers ---------- */
+.nums {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 13px;
+  margin-bottom: 16px;
+}
+.num {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 15px 16px;
+}
+.num-value { font-size: 29px; font-weight: 600; line-height: 1.1; color: var(--green); }
+.num-label { font-size: 14.5px; font-weight: 600; margin: 3px 0 5px; }
+.num-why { font-size: 13.5px; color: var(--ink-3); line-height: 1.45; }
+.not-measured {
+  padding: 14px 16px;
+  background: var(--warn-bg);
+  border: 1px dashed var(--warn-line);
+  border-radius: 7px;
+  color: var(--warn-line);
+  font-size: 15px;
+}
+
+/* ---------- install ---------- */
+ol.install { margin: 0 0 16px; padding-left: 24px; }
+ol.install li { margin-bottom: 14px; }
+.aside { display: block; font-size: 14px; color: var(--ink-3); margin-top: 3px; }
+
+code {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+/* ---------- footer ---------- */
+footer { padding: 34px 0 48px; color: var(--ink-2); }
+footer p { margin: 0 0 9px; }
+
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  h1 { font-size: 27px; }
+  h2 { font-size: 22px; }
+  .lede { font-size: 17.5px; }
+  .hero { padding: 38px 0 34px; }
+  .cta { display: block; text-align: center; }
+}

@@ -1,6 +1,6 @@
 {
   "name": "daari",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Voice guide that points at the next step on any website, and never clicks for you.",
   "license": "MIT",
@@ -8,6 +8,8 @@
     "test": "node tests/offline.js",
     "eval": "node tests/eval.js",
     "eval:dry": "node tests/eval.js --dry",
+    "numbers": "node scripts/numbers.js",
+    "package": "node scripts/package.js",
     "deploy": "vercel --prod"
   }
 }

@@ -24,7 +24,7 @@ var SESSION_KEY = 'daariSession';
 
 /* The recipes Daari knows. An extension cannot list its own directory, so the
    filenames are named here. */
-var RECIPE_FILES = ['practice-book-ticket', 'practice-check-pnr'];
+var RECIPE_FILES = ['practice-book-ticket', 'practice-check-pnr', 'real-pnr-enquiry'];
 
 /* Budget, from CLAUDE.md rule 6. Counted in the worker, which is the only place
    that can actually spend money. */
@@ -78,6 +78,12 @@ async function matchRecipe(goal) {
   var bestHits = 0;
 
   Object.keys(recipes).forEach(function (task) {
+    /* A recipe can be switched off while it is still being written. A stub with
+       placeholder labels would match a goal and then resolve to nothing, so
+       Daari would say "I am not sure" on a page it could otherwise have read
+       with no recipe at all -- worse than having no recipe. */
+    if (recipes[task].enabled === false) { return; }
+
     var phrases = recipes[task].match_phrases || {};
     var hits = 0;
     Object.keys(phrases).forEach(function (lang) {

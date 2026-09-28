@@ -18,7 +18,7 @@ self.DAARI_CONFIG = {
   // extension where anyone can read it. It is a locked screen door: it stops a
   // crawler or a copied URL from spending the budget. The thing that actually
   // protects the money is the hard spending limit in the OpenAI dashboard.
-  CLIENT: "daari/0.5",
+  CLIENT: "daari/0.7",
 
   // Fetch Telugu speech from /api/tts?
   //

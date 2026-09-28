@@ -1,0 +1,217 @@
+{
+  "url": "https://daari-ai.vercel.app/practice/pnr.html",
+  "title": "PNR Status — Yatra Demo Rail",
+  "capturedAt": "2026-09-28T14:13:41.475Z",
+  "elements": [
+    {
+      "i": 0,
+      "tag": "a",
+      "type": "",
+      "name": "Train running status",
+      "filled": false
+    },
+    {
+      "i": 1,
+      "tag": "a",
+      "type": "",
+      "name": "Seat availability",
+      "filled": false
+    },
+    {
+      "i": 2,
+      "tag": "a",
+      "type": "",
+      "name": "Fare enquiry",
+      "filled": false
+    },
+    {
+      "i": 3,
+      "tag": "a",
+      "type": "",
+      "name": "Platform enquiry",
+      "filled": false
+    },
+    {
+      "i": 4,
+      "tag": "a",
+      "type": "",
+      "name": "Book a new ticket",
+      "filled": false
+    },
+    {
+      "i": 5,
+      "tag": "input",
+      "type": "text",
+      "name": "PNR number *",
+      "filled": true
+    },
+    {
+      "i": 6,
+      "tag": "button",
+      "type": "submit",
+      "name": "Check status",
+      "filled": false
+    },
+    {
+      "i": 7,
+      "tag": "a",
+      "type": "",
+      "name": "About us",
+      "filled": false
+    },
+    {
+      "i": 8,
+      "tag": "a",
+      "type": "",
+      "name": "Terms of use",
+      "filled": false
+    },
+    {
+      "i": 9,
+      "tag": "a",
+      "type": "",
+      "name": "Privacy policy",
+      "filled": false
+    },
+    {
+      "i": 10,
+      "tag": "a",
+      "type": "",
+      "name": "Accessibility",
+      "filled": false
+    },
+    {
+      "i": 11,
+      "tag": "a",
+      "type": "",
+      "name": "Site map",
+      "filled": false
+    },
+    {
+      "i": 12,
+      "tag": "a",
+      "type": "",
+      "name": "Contact us",
+      "filled": false
+    },
+    {
+      "i": 13,
+      "tag": "a",
+      "type": "",
+      "name": "RTI",
+      "filled": false
+    },
+    {
+      "i": 14,
+      "tag": "a",
+      "type": "",
+      "name": "Feedback",
+      "filled": false
+    },
+    {
+      "i": 15,
+      "tag": "a",
+      "type": "",
+      "name": "Login",
+      "filled": false
+    },
+    {
+      "i": 16,
+      "tag": "a",
+      "type": "",
+      "name": "Register",
+      "filled": false
+    },
+    {
+      "i": 17,
+      "tag": "a",
+      "type": "",
+      "name": "Agent Login",
+      "filled": false
+    },
+    {
+      "i": 18,
+      "tag": "a",
+      "type": "",
+      "name": "हिन्दी",
+      "filled": false
+    },
+    {
+      "i": 19,
+      "tag": "a",
+      "type": "",
+      "name": "A-",
+      "filled": false
+    },
+    {
+      "i": 20,
+      "tag": "a",
+      "type": "",
+      "name": "A+",
+      "filled": false
+    },
+    {
+      "i": 21,
+      "tag": "a",
+      "type": "",
+      "name": "Book Ticket",
+      "filled": false
+    },
+    {
+      "i": 22,
+      "tag": "a",
+      "type": "",
+      "name": "PNR Status",
+      "filled": false
+    },
+    {
+      "i": 23,
+      "tag": "a",
+      "type": "",
+      "name": "Train Schedule",
+      "filled": false
+    },
+    {
+      "i": 24,
+      "tag": "a",
+      "type": "",
+      "name": "Fare Enquiry",
+      "filled": false
+    },
+    {
+      "i": 25,
+      "tag": "a",
+      "type": "",
+      "name": "Seat Availability",
+      "filled": false
+    },
+    {
+      "i": 26,
+      "tag": "a",
+      "type": "",
+      "name": "Cancellations",
+      "filled": false
+    },
+    {
+      "i": 27,
+      "tag": "a",
+      "type": "",
+      "name": "Retiring Rooms",
+      "filled": false
+    },
+    {
+      "i": 28,
+      "tag": "a",
+      "type": "",
+      "name": "Tourism Packages",
+      "filled": false
+    },
+    {
+      "i": 29,
+      "tag": "a",
+      "type": "",
+      "name": "Help & Support",
+      "filled": false
+    }
+  ]
+}
