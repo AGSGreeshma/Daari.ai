@@ -30,9 +30,17 @@ Every module maps to one of those five words. If a piece of code doesn't, questi
 
 1. **Daari never clicks, types or submits for the user.** It only points and speaks. This is the
    product, not a limitation.
-2. **Never send any input value to the AI.** Send only a field's label, type and `filled: true|false`.
-   Not "redact the sensitive ones" — send *no* values at all, ever. One rule, nothing to get wrong,
-   and Daari can still tell whether a box has been filled.
+2. **Never send any user-entered value to the AI.** Send only a field's label, type and
+   `filled: true|false`. Not "redact the sensitive ones" — send *no* typed values at all, ever. One
+   rule, nothing to get wrong, and Daari can still tell whether a box has been filled.
+
+   **The one exception**, and it is narrow: for `<input type="submit|button|reset|image">`, the
+   `value` (or `alt`) attribute may be read, because it is the label the page author printed on the
+   button and such an input cannot be typed into at all. Without it, the single most important button
+   on many older government forms comes back nameless. Everything else keeps its value unread, and a
+   button input always reports `filled: false` — a button is not a box. Enforced in
+   `accessibleName()` / `isFilled()` in `extension/content/overlay.js` via one explicit list of
+   those four types. If you widen that list, you have broken rule 2.
 3. **Safety rules are enforced in code, never delegated to the model.** The stop-before-payment gate
    fires on a keyword check in our own code. The model's `stopAndConfirm` flag can only ever *add* a
    stop, never remove one.

@@ -7,8 +7,11 @@
 
    Two things this file must never do:
      1. Click, type or submit anything. It only listens and draws.
-     2. Read out an input's value to anyone. Values never leave this file.
-        We report "filled: true" and nothing more.
+     2. Read out a USER-ENTERED value to anyone. Those never leave this file.
+        We report "filled: true" and nothing more. The one exception is a
+        button written as <input type="submit">, whose value attribute is the
+        author's own label and can never hold typed input -- see
+        accessibleName() and rule 2 in CLAUDE.md.
 
    This script is destroyed and re-created on every page load, so it must
    never be where session state lives. The brain arrives in Phase 4.
@@ -82,9 +85,20 @@
   /* The accessible name: the words a person would use for this thing.
 
      Tried in the order real browsers use, stopping at the first that gives
-     us something. NOTE: an input's value is never consulted, not even for
-     <input type="submit">, where the value is the button's own label. That
-     is a deliberate reading of the rule "never include any input value". */
+     us something. A user-entered value is never consulted -- see the one
+     narrow exception for button-shaped inputs below. */
+
+  /* The four input types that are buttons rather than boxes. For these, and
+     only these, the value attribute is the author's own label -- the words
+     printed on the button -- and the field cannot be typed into at all, so
+     reading it can never expose anything the user entered. */
+  var BUTTON_INPUT_TYPES = ['submit', 'button', 'reset', 'image'];
+
+  function isButtonInput(el) {
+    return el.tagName.toLowerCase() === 'input' &&
+           BUTTON_INPUT_TYPES.indexOf((el.type || '').toLowerCase()) !== -1;
+  }
+
   function accessibleName(el) {
     var name = (el.getAttribute('aria-label') || '').trim();
     if (name) { return name; }
@@ -99,6 +113,17 @@
         if (ref) { parts.push(visibleText(ref)); }
       });
       name = parts.join(' ').trim();
+      if (name) { return name; }
+    }
+
+    /* A button written as an input. Without this, <input type="submit"
+       value="Submit"> comes back nameless, and Daari cannot describe the one
+       button that matters on a lot of older government forms. The alt text
+       comes first for type="image", which is how such buttons are labelled. */
+    if (isButtonInput(el)) {
+      name = (el.getAttribute('alt') || '').trim();
+      if (name) { return name; }
+      name = (el.getAttribute('value') || '').trim();
       if (name) { return name; }
     }
 
@@ -166,6 +191,9 @@
     var tag = el.tagName.toLowerCase();
     if (tag === 'input') {
       if (el.type === 'checkbox' || el.type === 'radio') { return el.checked === true; }
+      /* A button is not a box, so it is never "filled". Its value attribute
+         is a label, and saying filled:true here would be nonsense. */
+      if (isButtonInput(el)) { return false; }
       return String(el.value || '').length > 0;
     }
     if (tag === 'textarea') { return String(el.value || '').length > 0; }
