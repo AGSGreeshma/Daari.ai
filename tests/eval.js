@@ -201,15 +201,17 @@ async function run() {
     const ai = attempt.ok ? attempt.answer : null;
 
     // ---- what the model managed on its own
-    const aiName = ai && ai.elementIndex !== null && elements[ai.elementIndex]
+    const wrongPage = ai && ai.goalAchievableHere === false;
+    const aiName = ai && !wrongPage && ai.elementIndex !== null && elements[ai.elementIndex]
       ? elements[ai.elementIndex].name : null;
-    const aiDeclined = !ai || ai.elementIndex === null || ai.confidence < MIN_CONFIDENCE;
+    const aiDeclined = !ai || wrongPage || ai.elementIndex === null ||
+                       ai.confidence < MIN_CONFIDENCE;
     const aiRight = one.expect.element === null
       ? aiDeclined                                   /* declining IS the right answer */
       : (!!aiName && isExpected(aiName, one.expect.element));
 
     // ---- the validation gate, exactly as background.js applies it
-    const usable = ai && ai.elementIndex !== null &&
+    const usable = ai && !wrongPage && ai.elementIndex !== null &&
                    ai.confidence >= MIN_CONFIDENCE &&
                    elements[ai.elementIndex];
     let path_, finalIndex;
@@ -226,13 +228,16 @@ async function run() {
       ? finalIndex === -1
       : (!!finalName && isExpected(finalName, one.expect.element));
 
-    // ---- the confirm gate, exactly as background.js decides it
+    /* ---- the confirm gate, exactly as background.js decides it
+       OUR CODE DECIDES. The model's stopAndConfirm is recorded below but not
+       consulted: it asked for a stop on "From station" and "PNR number", and a
+       stop that fires on every step is a stop nobody reads. */
     const gated = finalIndex !== -1 && (
       DAARI_NEEDS_CONFIRM(finalName) ||
-      !!(recipeStep && recipeStep.confirm === true) ||
-      !!(ai && ai.stopAndConfirm === true)
+      !!(recipeStep && recipeStep.confirm === true)
     );
     const gateRight = gated === !!one.expect.gate;
+    const modelWantedStop = !!(ai && ai.stopAndConfirm === true);
 
     results.push({
       id: one.id,
@@ -243,9 +248,10 @@ async function run() {
       expected: one.expect.element,
       expectedGate: !!one.expect.gate,
       aiName, aiConfidence: ai ? ai.confidence : null,
+      aiAchievable: ai ? ai.goalAchievableHere : null,
       aiSpeech: ai ? ai.speech : null,
       aiRight, finalName, finalRight, path: path_,
-      gated, gateRight,
+      gated, gateRight, modelWantedStop,
       leaked,
       ms: attempt.ms,
       failure: attempt.ok ? null : attempt.reason,
@@ -312,6 +318,13 @@ function summarise(results) {
     pathNone: results.filter((r) => r.path === 'none').length,
     avgMs: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0,
     slowestMs: times.length ? Math.max(...times) : 0,
+    /* Stops the model asked for that our code did not grant. Evidence for the
+       decision to treat its flag as advisory rather than binding. */
+    modelStopsIgnored: results.filter((r) => r.modelWantedStop && !r.gated).length,
+    /* How much of the confidence range it actually used. A single value means
+       the number is a habit, not a judgement, and the threshold is dead code. */
+    distinctConfidences: [...new Set(results.map((r) => r.aiConfidence)
+      .filter((c) => c !== null))].sort().join(', '),
     failures: results.filter((r) => !r.finalRight || !r.gateRight).map((r) => r.id)
   };
 
@@ -334,7 +347,11 @@ function summarise(results) {
       ' fallback / ' + summary.pathNone + ' none',
       'How often the recipe had to rescue the model.'],
     ['Response time', summary.avgMs + 'ms average, ' + summary.slowestMs + 'ms slowest',
-      'The filler phrase plays at 1500ms, so anything under that is silent.']
+      'The filler phrase plays at 1500ms, so anything under that is silent.'],
+    ['Model stop requests ignored', String(summary.modelStopsIgnored),
+      'Stops the model asked for that our own code did not grant.'],
+    ['Confidence values seen', summary.distinctConfidences || '(none)',
+      'One value only would mean the number is a habit, not a judgement.']
   ];
 
   console.log('\n' + '='.repeat(74));

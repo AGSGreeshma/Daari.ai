@@ -67,10 +67,20 @@ const SYSTEM_PROMPT = [
   '   Never ask them to read a value back, and never repeat one.',
   '5. For a one-time code, card number, password or PIN, say only that they',
   '   should type it themselves.',
-  '6. If nothing on the page fits, set elementIndex to null and confidence',
-  '   below 0.4. A wrong instruction is far worse than admitting uncertainty.',
-  '7. If the element takes money, submits something final, or cancels',
-  '   something, set stopAndConfirm true.',
+  '6. FIRST, before choosing anything, answer goalAchievableHere: can THIS page,',
+  '   as listed below, actually accomplish what the user asked for? Not a later',
+  '   page, not after navigating somewhere else - this one. If the user wants to',
+  '   pay an electricity bill and this is a train booking page, the answer is',
+  '   false. If it is false, set elementIndex to null as well.',
+  '   Being useless here is a normal, correct answer. A wrong instruction is far',
+  '   worse, because this user will not second-guess you: if you point at the',
+  '   wrong button, they will press the wrong button.',
+  '7. confidence must be a real judgement, not a habit. Use the whole range.',
+  '   Below 0.4 means you are guessing.',
+  '8. Set stopAndConfirm true only for something irreversible: it takes money,',
+  '   submits something final, or cancels a booking. Not for ordinary typing.',
+  '   This is advisory - Daari decides its own stops in code - so an unnecessary',
+  '   true is simply noise.',
   '',
   'done_when says how to tell the step is finished. Choose exactly one of:',
   '  url_changed    pressing it loads a different page',
@@ -89,8 +99,13 @@ const RESPONSE_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['elementIndex', 'speech', 'done_when', 'stopAndConfirm', 'confidence'],
+    /* goalAchievableHere is FIRST on purpose: the model fills the fields in
+       order, so it has to decide whether the page can do the job before it has
+       committed to an element. Asking afterwards gets a rationalisation. */
+    required: ['goalAchievableHere', 'elementIndex', 'speech', 'done_when',
+               'stopAndConfirm', 'confidence'],
     properties: {
+      goalAchievableHere: { type: 'boolean' },
       elementIndex: { type: ['integer', 'null'] },
       speech: { type: 'string' },
       done_when: { type: 'string', enum: DONE_WHEN },
@@ -300,8 +315,13 @@ module.exports = async (req, res) => {
   const index = answer.elementIndex;
   const realIndex = checked.cleaned.some(function (el) { return el.i === index; });
 
+  /* Default to true only when the field is genuinely absent (an older model in
+     json_object mode). An explicit false is always honoured. */
+  const achievable = answer.goalAchievableHere !== false;
+
   res.status(200).json({
-    elementIndex: realIndex ? index : null,
+    goalAchievableHere: achievable,
+    elementIndex: achievable && realIndex ? index : null,
     speech: String(answer.speech || '').slice(0, 300),
     done_when: DONE_WHEN.indexOf(answer.done_when) !== -1 ? answer.done_when : 'clicked',
     stopAndConfirm: answer.stopAndConfirm === true,

@@ -363,15 +363,68 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   check('  gate cleared', s.gate, false);
   check('  and the page is told it was confirmed, for its own check', s.confirmed, true);
 
-  // stopAndConfirm can ADD a stop on an otherwise harmless element.
+  /* The model's stopAndConfirm is ADVISORY. It used to be OR-ed in, and the
+     live evaluation showed the model asking for stops on "From station",
+     "To station", "Class" and "PNR number" -- 9 false stops in 31 cases. A stop
+     that fires on every step is a stop nobody reads, and inventing stops is as
+     much "delegating safety to the model" as removing them. */
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
-  const HARMLESS = [{ i: 0, tag: 'button', type: 'button', name: 'Continue', filled: false }];
-  aiReply = { elementIndex: 0, speech: 'Press Continue', done_when: 'clicked',
-              stopAndConfirm: true, confidence: 0.9 };
+  const HARMLESS = [{ i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false }];
+  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Type here',
+              done_when: 'field_filled', stopAndConfirm: true, confidence: 0.9 };
   await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', HARMLESS)));
-  check('model stopAndConfirm ADDS a stop on a harmless-looking button', s.gate, true);
+  check('model asking for a stop on an ordinary field is IGNORED', s.gate, false);
+  check('  but it is recorded, so the ask is visible', s.modelWantedStop, true);
+  check('  and the step still runs', s.index, 0);
+
+  // Our own list still decides, with no help from the model.
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  const DANGEROUS = [{ i: 0, tag: 'button', type: 'submit', name: 'Pay ₹500', filled: false }];
+  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Press it',
+              done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://somewhere.else/x', DANGEROUS)));
+  check('our word list still stops, even when the model says not to', s.gate, true);
+}
+
+console.log('\n7b. goalAchievableHere: saying "I am not sure" and meaning it');
+{
+  const PAYMENT = [
+    { i: 0, tag: 'input', type: 'text', name: 'Card number *', filled: false },
+    { i: 1, tag: 'button', type: 'submit', name: 'Pay ₹263', filled: false }
+  ];
+
+  /* The real failure this fixes: asked in Hindi to apply for a passport, on the
+     payment page, the live model pointed at the Pay button with confidence 0.9.
+     Confidence could not catch it, because 30 of 31 answers came back at 0.9 --
+     a constant, not a judgement. */
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiFail = null;
+  aiReply = { goalAchievableHere: false, elementIndex: 1, speech: 'Press Pay',
+              done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'apply for a passport', tabId: 1 });
+  let s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://x.dev/payment.html', PAYMENT)));
+  check('a false goalAchievableHere overrides a confident element choice', s.path, 'none');
+  check('  points at nothing', s.index, -1);
+  check('  and says so', s.say, ctx.self.DAARI_STRINGS.ui.notSure.en);
+  check('  with the reason recorded', s.why, 'model says this page cannot do it');
+
+  /* And it must not block a legitimate answer. The goal deliberately contains
+     no recipe match_phrase, so this really is the model working alone -- a goal
+     mentioning "ticket" would match the booking recipe and be judged against
+     its first step instead. */
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Type your card number here',
+              done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'complete this form', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://x.dev/payment.html', PAYMENT)));
+  check('a true goalAchievableHere lets the answer through', s.path, 'ai');
+  check('  pointing at the card box', s.index, 0);
 }
 
 console.log('\n8. Rule 2: nothing the user typed can leave');
