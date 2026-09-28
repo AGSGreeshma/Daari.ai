@@ -461,6 +461,7 @@
 
        clicked[:name]           the user clicked it, themselves
        field_filled[:name]      the box has something in it
+       value_changed[:name]     a dropdown or box was actually changed
        element_gone:name        it is no longer on the page
        text_appears:some words  those words became visible
 
@@ -485,7 +486,7 @@
 
     /* Which element does this rule watch? Its own, unless named otherwise. */
     var el = null;
-    if (kind === 'clicked' || kind === 'field_filled') {
+    if (kind === 'clicked' || kind === 'field_filled' || kind === 'value_changed') {
       var index = defaultIndex;
       if (argument) {
         index = resolveByName(lastList.map(function (e) { return e.data; }), [argument]);
@@ -508,6 +509,18 @@
     function onInput() {
       if (el && isFilled(el)) { finish(); }
     }
+
+    /* value_changed, for a box or dropdown that already has something in it.
+
+       Note what is NOT here: we do not remember the old value and compare.
+       The browser's own "change" event fires exactly when the value actually
+       changed, so no value is ever read at all -- which keeps rule 2 intact
+       without needing an exception.
+
+       "blur" is also accepted, so that a user who opens the dropdown and
+       decides the default was right all along is not stuck forever on a step
+       that can never complete. */
+    function onChanged() { finish(); }
 
     /* Both of the watch-the-whole-page rules go through here, debounced,
        because a busy page can fire hundreds of mutations a second and
@@ -535,6 +548,8 @@
         el.removeEventListener('input', onInput);
         el.removeEventListener('change', onInput);
         el.removeEventListener('blur', onInput);
+        el.removeEventListener('change', onChanged);
+        el.removeEventListener('blur', onChanged);
       }
       if (observer) { observer.disconnect(); observer = null; }
       if (recheckTimer !== null) { window.clearTimeout(recheckTimer); recheckTimer = null; }
@@ -552,6 +567,12 @@
         el.addEventListener('input', onInput);
         el.addEventListener('change', onInput);
         el.addEventListener('blur', onInput);
+      }
+
+    } else if (kind === 'value_changed') {
+      if (el) {
+        el.addEventListener('change', onChanged);
+        el.addEventListener('blur', onChanged);
       }
 
     } else if (kind === 'text_appears' || kind === 'element_gone') {
@@ -667,7 +688,11 @@
     }
 
     highlight(index);
-    announce(payload.say, payload.stepLabel, '', lang);
+    /* A notice ("you went back") is said BEFORE the instruction, in the same
+       breath, so the user understands why the ring moved backwards rather
+       than thinking Daari lost its place. */
+    announce(payload.notice ? payload.notice + ' ' + payload.say : payload.say,
+             payload.stepLabel, '', lang);
 
     stopWatching = watchForDone(payload.done_when, index, function () {
       ask({ type: 'DAARI_STEP_DONE', url: location.href }).then(function (next) {

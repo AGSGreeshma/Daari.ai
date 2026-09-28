@@ -61,6 +61,19 @@ function ruleKind(rule) {
   return String(rule || '').split(':')[0];
 }
 
+/* The earliest step that belongs to this page, looking only at steps already
+   walked past. -1 if the user has not been on this page yet.
+
+   The FIRST step on the page, deliberately: arriving back at the search page
+   means filling the search form again from the top, not resuming halfway down
+   a form whose boxes have been reset. */
+function firstStepOnPage(flow, page, beforeIndex) {
+  for (var i = 0; i < beforeIndex && i < flow.steps.length; i++) {
+    if (flow.steps[i].page === page) { return i; }
+  }
+  return -1;
+}
+
 /* =================================================================
    Describing a step to the page
 
@@ -191,24 +204,65 @@ var HANDLERS = {
 
   /* A page just finished loading and is asking whether it has a job.
 
-     This is also where the url_changed rule is settled. Doing it here rather
+     This is also where every URL decision is settled. Doing it here rather
      than in the page means nothing depends on a message escaping a page that
      is in the middle of being destroyed -- which is the race that makes
-     cross-page flows flaky. */
+     cross-page flows flaky.
+
+     Three things can be true of the page that just reported in:
+
+       it is the page the current step belongs to  -> carry on, same step
+       it is the page the NEXT step belongs to     -> the step completed
+       it is the page of an EARLIER step           -> the user pressed Back
+
+     Anything else is a page the flow knows nothing about, and the step is
+     left alone: the element will not resolve and Daari will say so honestly
+     rather than pointing at something on a page it did not expect. */
   DAARI_PAGE_READY: async function (message) {
     var session = await getSession();
     if (!session) { return { active: false }; }
 
+    var flow = flowFor(session);
     var step = stepAt(session);
-    if (step &&
-        ruleKind(step.done_when) === 'url_changed' &&
-        session.stepUrl &&
-        session.stepUrl !== message.url) {
-      advance(session, message.url);
+    var here = self.DAARI_PAGE_OF(message.url);
+    var notice = null;
+
+    if (flow && step) {
+      var nextStep = flow.steps[session.stepIndex + 1];
+
+      if (step.page && here === step.page) {
+        /* Same page as the current step. A reload, or a navigation that came
+           straight back. Nothing to do. */
+
+      } else if (ruleKind(step.done_when) === 'url_changed' &&
+                 nextStep && nextStep.page && here === nextStep.page) {
+        /* Forward, and only forward: the new page is specifically the one the
+           NEXT step belongs to. A URL that merely differs is not enough. */
+        advance(session, message.url);
+
+      } else {
+        /* Did the user press Back? Look for this page among the steps already
+           walked, and return to the FIRST step on it -- not the one they were
+           last on, because going back to a page means starting that page
+           again. */
+        var backTo = firstStepOnPage(flow, here, session.stepIndex);
+        if (backTo !== -1) {
+          session.stepIndex = backTo;
+          session.confirmedStep = null;
+          session.awaitingConfirm = null;
+          session.finished = false;
+          session.stepUrl = message.url;
+          notice = 'wentBack';
+        }
+      }
     }
 
     session.stepUrl = message.url;
     var payload = await describeStep(session);
+    if (notice) {
+      var lang = await currentLang();
+      payload.notice = self.DAARI_T(self.DAARI_STRINGS.ui[notice], lang);
+    }
     if (payload.final) { session.finished = true; }
     await saveSession(session);
     return payload;

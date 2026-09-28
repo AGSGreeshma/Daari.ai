@@ -169,6 +169,14 @@ self.DAARI_STRINGS = {
       hi: 'मदद बंद कीजिए',
       te: 'సహాయం ఆపండి'
     },
+    /* Said before the instruction when the user pressed the Back button, so
+       the ring moving backwards reads as understanding rather than confusion. */
+    wentBack: {
+      en: 'You went back - let us continue from here.',
+      hi: 'आप पीछे आ गए - यहाँ से आगे चलिए।',
+      te: 'మీరు వెనక్కి వచ్చారు - ఇక్కడ నుండి కొనసాగిద్దాం.'
+    },
+
     notGuiding: {
       en: 'Not guiding right now',
       hi: 'अभी मदद नहीं चल रही',
