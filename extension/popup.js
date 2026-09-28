@@ -1,15 +1,18 @@
 // Daari popup.
 //
 // Three buttons:
-//   Start demo            - runs the hardcoded 3-step walk-through (Phase 2)
+//   Open Daari panel      - the real surface: language, microphone, demo
 //   Show what Daari sees  - prints the serialized page, to prove no values leak
 //   Test connection       - asks the API if it is alive (Phase 0)
+//
+// Starting the demo moved into the side panel in Phase 3, because the panel is
+// where the language is chosen and where the speaking happens.
 //
 // The popup is only a remote control. All the real work happens in the
 // content script inside the page, which is why every button here just sends
 // a message and reports what came back.
 
-const startDemoBtn = document.getElementById('startDemo');
+const openPanelBtn = document.getElementById('openPanel');
 const debugBtn = document.getElementById('debug');
 const testBtn = document.getElementById('test');
 const result = document.getElementById('result');
@@ -62,23 +65,21 @@ async function sendToPage(message) {
   }
 }
 
-// ---------------------------------------------------------------- Start demo
-startDemoBtn.addEventListener('click', async () => {
-  startDemoBtn.disabled = true;
+// ----------------------------------------------------------- Open the panel
+openPanelBtn.addEventListener('click', async () => {
+  openPanelBtn.disabled = true;
   try {
-    const reply = await sendToPage({ type: 'DAARI_START_DEMO' });
-    if (reply && reply.ok) {
-      show('good',
-        'Demo started: ' + reply.steps + ' steps.\n\n' +
-        'Look at the page, not at this popup. Close this popup and follow ' +
-        'the orange ring.');
-    } else {
-      show('bad', 'The page did not start the demo.');
-    }
+    const tab = await currentTab();
+    // Opening the panel needs a real user gesture, which this click is.
+    await chrome.sidePanel.open({ tabId: tab.id });
+    window.close(); // get the popup out of the way
   } catch (e) {
-    show('bad', e.message);
+    show('bad',
+      'Could not open the Daari panel.\n\n' +
+      'If your Chrome is older than version 116 it has no side panel. ' +
+      'Details: ' + e.message);
   } finally {
-    startDemoBtn.disabled = false;
+    openPanelBtn.disabled = false;
   }
 });
 

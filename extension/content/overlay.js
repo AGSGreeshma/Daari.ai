@@ -471,13 +471,51 @@
      this file is destroyed on every navigation.
      ================================================================= */
 
+  /* The words for these steps live in strings.js, matched BY INDEX, so the
+     spoken sentence and the written caption can never drift apart. Logic
+     here, text there. */
   var DEMO_STEPS = [
-    { say: 'Type where you are starting from', look_for: ['from station'], done_when: 'field_filled' },
-    { say: 'Now type where you are going',     look_for: ['to station'],   done_when: 'field_filled' },
-    { say: 'Press Search Trains',              look_for: ['search trains'], done_when: 'clicked' }
+    { look_for: ['from station'],  done_when: 'field_filled' },
+    { look_for: ['to station'],    done_when: 'field_filled' },
+    { look_for: ['search trains'], done_when: 'clicked' }
   ];
 
   var demoStopWatching = null;
+
+  /* Which language to caption and speak in. Telugu by default, matching the
+     side panel. Kept in step with the panel by watching storage, so switching
+     language takes effect on the next instruction. */
+  var demoLang = 'te';
+
+  chrome.storage.local.get({ lang: 'te' }).then(function (saved) {
+    demoLang = saved.lang;
+  }).catch(function () { /* keep the default */ });
+
+  chrome.storage.onChanged.addListener(function (changes, area) {
+    if (area === 'local' && changes.lang) { demoLang = changes.lang.newValue; }
+  });
+
+  /* Say it and show it, in one call.
+
+     The caption is drawn here in the page, right next to the ring where the
+     user is already looking. The speaking happens in the side panel, because
+     that is the one part of Daari that survives a page navigation -- this
+     script does not. If the panel is closed there is nobody listening, and
+     that is fine: the caption alone still carries the instruction. */
+  function announce(text, stepLabel, kind) {
+    showCaption(text, stepLabel, kind);
+    try {
+      var sending = chrome.runtime.sendMessage({
+        type: 'DAARI_SPEAK',
+        text: text,
+        stepLabel: stepLabel,
+        lang: demoLang
+      });
+      if (sending && sending.catch) { sending.catch(function () {}); }
+    } catch (e) {
+      /* Panel not open. Captions carry on regardless. */
+    }
+  }
 
   /* Find the element a step is talking about, by matching its labels against
      the accessible names on the page. A small ancestor of the recipe
@@ -500,9 +538,13 @@
   function runDemoStep(n) {
     if (demoStopWatching) { demoStopWatching(); demoStopWatching = null; }
 
+    var T = window.DAARI_T;
+    var S = window.DAARI_STRINGS;
+    var stepLabel = T(S.ui.stepOf, demoLang, { n: n + 1, total: DEMO_STEPS.length });
+
     if (n >= DEMO_STEPS.length) {
       hideRing();
-      showCaption('✅ Well done!', 'Finished', 'done');
+      announce('✅ ' + T(S.ui.wellDone, demoLang), T(S.ui.finished, demoLang), 'done');
       window.setTimeout(clearAll, 7000);
       return;
     }
@@ -514,13 +556,12 @@
     if (index === -1) {
       /* The failure voice from CLAUDE.md. Never a confident wrong pointer. */
       hideRing();
-      showCaption('I am not sure about this page. Can you tell me what you see?',
-                  'Step ' + (n + 1) + ' of ' + DEMO_STEPS.length, 'lost');
+      announce(T(S.ui.notSure, demoLang), stepLabel, 'lost');
       return;
     }
 
     highlight(index);
-    showCaption(step.say, 'Step ' + (n + 1) + ' of ' + DEMO_STEPS.length, '');
+    announce(T(S.demoSay[n], demoLang), stepLabel, '');
 
     demoStopWatching = watchForDone(step.done_when, index, function () {
       runDemoStep(n + 1);

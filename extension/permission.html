@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Allow microphone for Daari</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 40px 24px;
+      background: #fffdf7;
+      color: #23262a;
+      font-family: "Nirmala UI", "Segoe UI", system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 27px; margin: 0 0 6px; }
+    .sub { color: #6b6f75; margin: 0 0 26px; font-size: 15px; }
+    .why {
+      background: #fff;
+      border: 1px solid #e2ded2;
+      border-left: 5px solid #c25a00;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 26px;
+      font-size: 16px;
+    }
+    .why strong { color: #c25a00; }
+    button {
+      width: 100%;
+      padding: 19px;
+      font-size: 19px;
+      font-weight: bold;
+      font-family: inherit;
+      border: 0;
+      border-radius: 12px;
+      background: #c25a00;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { background: #a54c00; }
+    button:disabled { background: #d4a882; cursor: default; }
+    .box {
+      display: none;
+      margin-top: 22px;
+      padding: 18px;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+    .box h2 { margin: 0 0 7px; font-size: 19px; }
+    .box p { margin: 0; }
+    .box.good { background: #e8f4ea; border: 1px solid #1f6f4a; }
+    .box.bad  { background: #fdecea; border: 1px solid #b3261e; }
+    .foot { margin-top: 30px; font-size: 14px; color: #6b6f75; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Allow microphone for Daari</h1>
+    <p class="sub">You only ever have to do this once.</p>
+
+    <div class="why">
+      Chrome attaches microphone permission to whichever website asks for it. If Daari asked from
+      inside each site you visit, you would get this prompt <strong>again and again, on every
+      website</strong>. Asking here instead means the permission belongs to Daari itself, and you
+      will never be asked again.
+      <br><br>
+      Daari listens only while you are holding the microphone button. It never listens in the
+      background, and <strong>it never clicks or types anything for you</strong>.
+    </div>
+
+    <button id="ask">Allow microphone</button>
+
+    <div class="box" id="box"></div>
+
+    <p class="foot">
+      Do not want to use your voice? You can close this tab and type your goal into the Daari
+      panel instead. Everything works the same way.
+    </p>
+  </div>
+
+  <script src="permission.js"></script>
+</body>
+</html>

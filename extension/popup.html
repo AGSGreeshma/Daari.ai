@@ -29,9 +29,9 @@
       cursor: pointer;
     }
     button:disabled { background: #9ab5a7; cursor: default; }
-    /* The demo button is the main action, so it leads. */
-    #startDemo { background: #c25a00; font-size: 17px; font-weight: bold; }
-    #startDemo:hover { background: #a54c00; }
+    /* Opening the panel is the main action, so it leads. */
+    #openPanel { background: #c25a00; font-size: 17px; font-weight: bold; }
+    #openPanel:hover { background: #a54c00; }
     /* The two developer tools are visibly secondary. */
     #debug, #test { background: #4a5a68; font-size: 14px; padding: 10px; }
     #debug:hover, #test:hover { background: #3a4a58; }
@@ -63,9 +63,12 @@
 </head>
 <body>
   <h1>Daari</h1>
-  <p class="sub">Phase 2 &mdash; ring, caption and local verify</p>
+  <p class="sub">Phase 3 &mdash; voice, ring and caption</p>
 
-  <button id="startDemo">Start demo</button>
+  <button id="openPanel">Open Daari panel</button>
+  <p class="sub" style="margin:0 0 4px">
+    The panel is where you choose your language, speak your goal and start the demo.
+  </p>
 
   <div class="divider">Developer tools</div>
   <button id="debug">Show what Daari sees</button>

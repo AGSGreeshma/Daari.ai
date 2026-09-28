@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Daari</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+
+  <h1>Daari</h1>
+  <p class="tagline">I show you the path. You walk it.</p>
+
+  <p class="label">Language</p>
+  <div class="langs" id="langs">
+    <!-- Buttons are built by sidepanel.js from strings.js, so the list of
+         languages lives in exactly one place. -->
+  </div>
+
+  <button class="mic" id="mic">Speak your goal</button>
+
+  <div class="transcript" id="transcript">
+    <span class="placeholder" id="placeholder">
+      What do you want to do? Tap the button above and say it.
+    </span>
+  </div>
+
+  <div class="goal" id="goal"></div>
+
+  <div class="typed">
+    <input type="text" id="typedGoal" aria-label="Type your goal instead of speaking">
+    <button id="useTyped">Use this</button>
+  </div>
+
+  <div class="msg" id="message"></div>
+
+  <hr>
+
+  <p class="label">Guidance</p>
+
+  <div class="instruction" id="instruction"></div>
+
+  <div class="controls">
+    <button id="repeat">&#128257; Repeat</button>
+    <button id="stopSpeak">&#9208; Stop speaking</button>
+  </div>
+
+  <button class="start" id="startDemo">Start demo on this page</button>
+
+  <p class="voice-status" id="voiceStatus">Checking which voices Windows has...</p>
+
+  <!-- strings.js first: sidepanel.js reads every word from it. -->
+  <script src="strings.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
