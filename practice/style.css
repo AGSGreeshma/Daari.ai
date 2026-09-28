@@ -1,0 +1,312 @@
+/* Yatra Demo Rail — shared styling.
+   Deliberately dense and a bit old-fashioned, like an ageing government
+   portal: small text, hard borders, lots of links. That density is the point,
+   because it is what makes voice guidance genuinely useful.
+
+   The palette is invented. It is not copied from any real website. */
+
+:root {
+  --maroon: #7a1f2b;
+  --maroon-dark: #5d1620;
+  --slate: #3a4a5a;
+  --bg: #f4f2ec;
+  --panel: #ffffff;
+  --line: #c9c3b6;
+  --line-soft: #e4e0d6;
+  --link: #1a4f8a;
+  --ink: #2b2b2b;
+  --muted: #6d6a62;
+  --warn-bg: #fff8e1;
+  --warn-line: #d9b441;
+  --ok-bg: #e8f4ea;
+  --ok-line: #2f7a43;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+a { color: var(--link); }
+a:hover { text-decoration: none; }
+
+/* ---------- the demo warning banner, on every single page ---------- */
+.demo-banner {
+  background: var(--warn-bg);
+  border-bottom: 2px solid var(--warn-line);
+  color: #6b4e00;
+  text-align: center;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: bold;
+}
+
+/* ---------- masthead ---------- */
+.portal-head {
+  background: var(--maroon);
+  color: #fff;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 11px; }
+.emblem {
+  width: 40px; height: 40px;
+  border: 2px solid #e8c9a0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold; letter-spacing: 0.5px;
+  background: var(--maroon-dark);
+  flex-shrink: 0;
+}
+.brand-name { font-size: 17px; font-weight: bold; letter-spacing: 0.2px; }
+.brand-sub { font-size: 11px; color: #f0d9c4; }
+.head-right { font-size: 11.5px; }
+.head-right a { color: #ffe9d6; margin: 0 3px; }
+
+/* ---------- main navigation ---------- */
+.portal-nav {
+  background: var(--slate);
+  padding: 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: 3px solid var(--maroon-dark);
+}
+.portal-nav a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 12px;
+  padding: 8px 11px;
+  border-right: 1px solid #52616f;
+  white-space: nowrap;
+}
+.portal-nav a:hover { background: #4b5c6c; }
+.portal-nav a.here { background: var(--bg); color: var(--maroon); font-weight: bold; }
+
+/* ---------- scrolling notice strip ---------- */
+.notice-strip {
+  background: #fdf3f4;
+  border-bottom: 1px solid var(--line);
+  padding: 5px 14px;
+  font-size: 11.5px;
+  color: #7a3b41;
+}
+.notice-strip b { color: var(--maroon); }
+
+.crumb {
+  padding: 7px 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ---------- page shell: sidebar + content ---------- */
+.shell {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  max-width: 1100px;
+}
+.sidebar {
+  width: 186px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.sidebar h3 {
+  margin: 0;
+  padding: 7px 10px;
+  background: var(--slate);
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+}
+.sidebar ul { list-style: none; margin: 0; padding: 4px 0; }
+.sidebar li { border-bottom: 1px dotted var(--line-soft); }
+.sidebar li:last-child { border-bottom: 0; }
+.sidebar a { display: block; padding: 5px 10px; font-size: 11.5px; text-decoration: none; }
+.sidebar a:hover { background: #f0eee6; }
+
+.content { flex: 1; min-width: 0; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.panel > h2 {
+  margin: 0;
+  padding: 8px 12px;
+  background: linear-gradient(#fdfcf9, #eeebe2);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--maroon);
+}
+.panel-body { padding: 12px; }
+
+/* ---------- forms ---------- */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
+}
+.field-row > label {
+  width: 150px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  text-align: right;
+}
+.field-row > label .req { color: #b3261e; }
+
+input[type="text"], input[type="date"], input[type="tel"],
+input[type="number"], input[type="email"], select {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 6px;
+  border: 1px solid #9a9488;
+  background: #fffef9;
+  color: var(--ink);
+  min-width: 190px;
+}
+input:focus, select:focus { outline: 2px solid #1a4f8a; outline-offset: 0; }
+
+.hint { font-size: 11px; color: var(--muted); }
+
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 16px;
+  border: 1px solid var(--maroon-dark);
+  border-radius: 3px;
+  background: linear-gradient(#8f2734, #711c27);
+  color: #fff;
+  cursor: pointer;
+}
+.btn:hover { background: var(--maroon-dark); }
+.btn-plain {
+  background: linear-gradient(#fbfaf6, #e6e2d7);
+  border: 1px solid #9a9488;
+  color: var(--ink);
+}
+.btn-plain:hover { background: #ded9cc; }
+.btn-big { font-size: 17px; padding: 13px 30px; font-weight: bold; }
+.btn-small { font-size: 11.5px; padding: 4px 10px; }
+
+/* an icon-only button: its name comes from aria-label, not from text */
+.icon-btn {
+  font-family: inherit;
+  font-size: 15px;
+  width: 26px; height: 24px;
+  padding: 0;
+  border: 1px solid #9a9488;
+  background: #f3f1e9;
+  color: var(--slate);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.icon-btn:hover { background: #e2ded1; }
+
+/* ---------- tables ---------- */
+table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+table.grid th {
+  background: var(--slate);
+  color: #fff;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  border: 1px solid #52616f;
+}
+table.grid td {
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  vertical-align: middle;
+}
+table.grid tr:nth-child(even) td { background: #fbfaf6; }
+.train-name { font-weight: bold; color: var(--maroon); }
+.train-no { color: var(--muted); font-size: 11px; }
+.avail-yes { color: #2f7a43; font-weight: bold; }
+.avail-few { color: #a2620b; font-weight: bold; }
+.fare { font-weight: bold; white-space: nowrap; }
+
+.info-row td {
+  background: #fdf9ec !important;
+  font-size: 11.5px;
+  color: #6b4e00;
+}
+
+/* ---------- messages ---------- */
+.msg { padding: 9px 11px; border: 1px solid; margin-bottom: 11px; font-size: 12.5px; }
+.msg-bad { background: #fdecea; border-color: #b3261e; color: #8c1d18; }
+.msg-ok { background: var(--ok-bg); border-color: var(--ok-line); color: #1d5e30; }
+.msg-info { background: #eef4fb; border-color: #1a4f8a; color: #14406e; }
+
+.otp-box {
+  background: #eef4fb;
+  border: 1px dashed #1a4f8a;
+  padding: 9px 11px;
+  margin: 9px 0;
+  font-size: 12.5px;
+}
+.otp-code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: var(--maroon);
+}
+
+/* ---------- summary lines ---------- */
+.summary { font-size: 12.5px; }
+.summary dt { float: left; width: 168px; clear: left; color: var(--muted); }
+.summary dd { margin: 0 0 5px 176px; font-weight: bold; }
+
+.total-row td { border-top: 2px solid var(--slate) !important; font-size: 14px; font-weight: bold; }
+
+.pnr-display {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 30px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--maroon);
+  background: #fdf9ec;
+  border: 2px dashed var(--warn-line);
+  padding: 13px;
+  text-align: center;
+  margin: 4px 0 12px;
+}
+
+/* ---------- footer ---------- */
+.portal-foot {
+  border-top: 3px solid var(--maroon);
+  background: #e9e5da;
+  padding: 11px 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.portal-foot a { margin-right: 9px; }
+.foot-links { margin-bottom: 6px; }
+
+/* Keep it usable on a small laptop screen. */
+@media (max-width: 760px) {
+  .shell { flex-direction: column; }
+  .sidebar { width: 100%; }
+  .field-row > label { width: auto; text-align: left; }
+  .summary dt { float: none; width: auto; }
+  .summary dd { margin-left: 0; }
+}

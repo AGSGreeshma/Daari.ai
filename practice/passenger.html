@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passenger Details — Yatra Demo Rail</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="demo-banner">Demo site for testing Daari — not a real booking service.</div>
+
+<header class="portal-head">
+  <div class="brand">
+    <span class="emblem" aria-hidden="true">YDR</span>
+    <div>
+      <div class="brand-name">Yatra Demo Rail</div>
+      <div class="brand-sub">Passenger Reservation System (Demonstration)</div>
+    </div>
+  </div>
+  <div class="head-right">
+    <a href="#">Login</a> | <a href="#">Register</a> | <a href="#">Agent Login</a> |
+    <a href="#">हिन्दी</a> | <a href="#">A-</a> <a href="#">A+</a>
+  </div>
+</header>
+
+<nav class="portal-nav">
+  <a href="index.html" class="here">Book Ticket</a>
+  <a href="pnr.html">PNR Status</a>
+  <a href="#">Train Schedule</a>
+  <a href="#">Fare Enquiry</a>
+  <a href="#">Seat Availability</a>
+  <a href="#">Cancellations</a>
+  <a href="#">Retiring Rooms</a>
+  <a href="#">Tourism Packages</a>
+  <a href="#">Help &amp; Support</a>
+</nav>
+
+<div class="notice-strip">
+  <b>Notice:</b> Never share a one-time password with anyone. On this demo site the code is
+  shown on screen, because there is no real phone to send it to.
+</div>
+
+<div class="crumb">Home &rsaquo; Plan My Journey &rsaquo; Trains Found &rsaquo; Passenger Details</div>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <h3>Your Journey</h3>
+    <ul>
+      <li><a href="results.html">Change train</a></li>
+      <li><a href="index.html">Change search</a></li>
+      <li><a href="#">Concession rules</a></li>
+      <li><a href="#">ID proof accepted</a></li>
+      <li><a href="#">Child fare rules</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+
+    <div class="panel">
+      <h2>Selected Train</h2>
+      <div class="panel-body">
+        <dl class="summary" id="trainSummary" style="margin:0"></dl>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Passenger Details</h2>
+      <div class="panel-body">
+
+        <div id="message" class="msg" style="display:none"></div>
+
+        <form id="passengerForm" novalidate>
+
+          <div class="field-row">
+            <label for="name">Passenger name <span class="req">*</span></label>
+            <input type="text" id="name" name="name" autocomplete="off">
+          </div>
+
+          <div class="field-row">
+            <label for="age">Age <span class="req">*</span></label>
+            <input type="number" id="age" name="age" min="1" max="120" style="min-width:90px">
+          </div>
+
+          <div class="field-row">
+            <label for="gender">Gender <span class="req">*</span></label>
+            <select id="gender" name="gender">
+              <option value="">-- Select --</option>
+              <option>Female</option>
+              <option>Male</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="berth">Berth preference</label>
+            <select id="berth" name="berth">
+              <option>No preference</option>
+              <option>Lower</option>
+              <option>Middle</option>
+              <option>Upper</option>
+              <option>Side lower</option>
+            </select>
+          </div>
+
+          <h3 style="font-size:13px;margin:16px 0 8px;color:#7a1f2b">Contact details</h3>
+          <!-- These two boxes carry a placeholder but no <label>. Real portals
+               do this constantly, and Daari has to cope with it, so it is left
+               here on purpose as a harder case than the fields above. -->
+          <div class="field-row">
+            <input type="tel" id="mobile" name="mobile" placeholder="Mobile number" maxlength="10">
+            <input type="email" id="email" name="email" placeholder="Email address (optional)">
+          </div>
+
+          <h3 style="font-size:13px;margin:16px 0 8px;color:#7a1f2b">Verify your mobile number</h3>
+
+          <div class="field-row">
+            <label>&nbsp;</label>
+            <button type="button" class="btn btn-plain" id="sendOtpBtn">Send OTP</button>
+            <span class="hint">A 6-digit code will appear below.</span>
+          </div>
+
+          <div class="otp-box" id="otpBox" style="display:none">
+            Your demo one-time password is:
+            <div class="otp-code" id="otpCode"></div>
+            <span class="hint">Shown on screen because this is a practice site with no real phone.</span>
+          </div>
+
+          <div class="field-row">
+            <label for="otp">Enter OTP <span class="req">*</span></label>
+            <input type="text" id="otp" name="otp" maxlength="6" style="min-width:120px" autocomplete="off">
+          </div>
+
+          <div class="field-row">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn" id="continueBtn">Continue to Payment</button>
+            <a href="results.html" class="hint">Back to train list</a>
+          </div>
+
+        </form>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="portal-foot">
+  <div class="foot-links">
+    <a href="#">About us</a><a href="#">Terms of use</a><a href="#">Privacy policy</a>
+    <a href="#">Accessibility</a><a href="#">Site map</a><a href="#">Contact us</a>
+    <a href="#">RTI</a><a href="#">Feedback</a>
+  </div>
+  Yatra Demo Rail is a fictional website created only to test the Daari voice guide.
+  It is not affiliated with any real railway or travel company, and it cannot book real travel.
+</footer>
+
+<script src="app.js"></script>
+<script>
+/* Passenger page: collect traveller details, run a pretend OTP check, then
+   move on to the pretend payment page. */
+(function () {
+  'use strict';
+
+  var journey = YDR.journey();
+  var train = YDR.chosenTrain();
+  var fare = YDR.fareFor(train, journey.cls);
+
+  /* Show which train is being booked. */
+  document.getElementById('trainSummary').innerHTML =
+    '<dt>Train</dt><dd>' + train.name + ' (' + train.no + ')</dd>' +
+    '<dt>Journey</dt><dd>' + journey.from + ' to ' + journey.to + '</dd>' +
+    '<dt>Date</dt><dd>' + YDR.niceDate(journey.date) + '</dd>' +
+    '<dt>Departs / Arrives</dt><dd>' + train.dep + ' / ' + train.arr + '</dd>' +
+    '<dt>Class</dt><dd>' + YDR.classByCode(journey.cls).name + '</dd>' +
+    '<dt>Base fare</dt><dd>' + YDR.money(fare) + '</dd>';
+
+  var form = document.getElementById('passengerForm');
+  var message = document.getElementById('message');
+  var otpBox = document.getElementById('otpBox');
+  var otpCode = document.getElementById('otpCode');
+  var otpInput = document.getElementById('otp');
+
+  /* The code we are pretending to have texted. Kept in a variable, not in
+     storage, so reloading the page means asking for a new one -- same as a
+     real site. */
+  var sentOtp = '';
+
+  document.getElementById('sendOtpBtn').addEventListener('click', function () {
+    sentOtp = String(Math.floor(100000 + Math.random() * 900000));
+    otpCode.textContent = sentOtp;
+    otpBox.style.display = 'block';
+    YDR.setMessage(message, 'info', 'A demo OTP has been generated. Type it into the Enter OTP box.');
+    otpInput.value = '';
+  });
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var name = document.getElementById('name').value.trim();
+    var age = document.getElementById('age').value.trim();
+    var gender = document.getElementById('gender').value;
+    var berth = document.getElementById('berth').value;
+    var mobile = document.getElementById('mobile').value.trim();
+    var typedOtp = otpInput.value.trim();
+
+    if (name === '') {
+      YDR.setMessage(message, 'bad', 'Please enter the passenger name.');
+      return;
+    }
+    if (age === '' || Number(age) < 1 || Number(age) > 120) {
+      YDR.setMessage(message, 'bad', 'Please enter an age between 1 and 120.');
+      return;
+    }
+    if (gender === '') {
+      YDR.setMessage(message, 'bad', 'Please select a gender.');
+      return;
+    }
+    if (mobile.length !== 10 || /\D/.test(mobile)) {
+      YDR.setMessage(message, 'bad', 'Please enter a 10-digit mobile number.');
+      return;
+    }
+    if (sentOtp === '') {
+      YDR.setMessage(message, 'bad', 'Please press Send OTP first.');
+      return;
+    }
+    if (typedOtp !== sentOtp) {
+      YDR.setMessage(message, 'bad', 'That OTP does not match. Check the 6-digit code shown above.');
+      return;
+    }
+
+    YDR.save('passenger', {
+      name: name, age: age, gender: gender, mobile: mobile, berth: berth
+    });
+
+    window.location.href = 'payment.html';
+  });
+}());
+</script>
+
+</body>
+</html>

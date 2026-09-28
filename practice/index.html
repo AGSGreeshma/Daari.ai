@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan My Journey — Yatra Demo Rail</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="demo-banner">Demo site for testing Daari — not a real booking service.</div>
+
+<header class="portal-head">
+  <div class="brand">
+    <span class="emblem" aria-hidden="true">YDR</span>
+    <div>
+      <div class="brand-name">Yatra Demo Rail</div>
+      <div class="brand-sub">Passenger Reservation System (Demonstration)</div>
+    </div>
+  </div>
+  <div class="head-right">
+    <a href="#">Login</a> | <a href="#">Register</a> | <a href="#">Agent Login</a> |
+    <a href="#">हिन्दी</a> | <a href="#">A-</a> <a href="#">A+</a>
+  </div>
+</header>
+
+<nav class="portal-nav">
+  <a href="index.html" class="here">Book Ticket</a>
+  <a href="pnr.html">PNR Status</a>
+  <a href="#">Train Schedule</a>
+  <a href="#">Fare Enquiry</a>
+  <a href="#">Seat Availability</a>
+  <a href="#">Cancellations</a>
+  <a href="#">Retiring Rooms</a>
+  <a href="#">Tourism Packages</a>
+  <a href="#">Help &amp; Support</a>
+</nav>
+
+<div class="notice-strip">
+  <b>Notice:</b> Scheduled maintenance of the demonstration server every Sunday 02:00–02:30 hrs.
+  Tatkal booking opens one day in advance. This is sample text on a practice site.
+</div>
+
+<div class="crumb">Home &rsaquo; Plan My Journey</div>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <h3>Quick Links</h3>
+    <ul>
+      <li><a href="pnr.html">Check PNR status</a></li>
+      <li><a href="#">Cancel a ticket</a></li>
+      <li><a href="#">Refund rules</a></li>
+      <li><a href="#">Concession forms</a></li>
+      <li><a href="#">Luggage allowance</a></li>
+      <li><a href="#">Lost property</a></li>
+      <li><a href="#">Contact a station</a></li>
+      <li><a href="#">Download mobile app</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+
+    <div class="panel">
+      <h2>Plan My Journey</h2>
+      <div class="panel-body">
+
+        <div id="message" class="msg" style="display:none"></div>
+
+        <form id="searchForm" novalidate>
+
+          <div class="field-row">
+            <label for="from">From station <span class="req">*</span></label>
+            <input type="text" id="from" name="from" autocomplete="off">
+            <span class="hint">Station name, e.g. Secunderabad</span>
+          </div>
+
+          <div class="field-row">
+            <label for="to">To station <span class="req">*</span></label>
+            <input type="text" id="to" name="to" autocomplete="off">
+            <span class="hint">Station name, e.g. Kazipet</span>
+          </div>
+
+          <div class="field-row">
+            <label for="date">Date of journey</label>
+            <input type="date" id="date" name="date">
+          </div>
+
+          <div class="field-row">
+            <label for="cls">Class</label>
+            <select id="cls" name="cls">
+              <!-- filled in by the script below -->
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="quota">Quota</label>
+            <select id="quota" name="quota">
+              <option>General</option>
+              <option>Ladies</option>
+              <option>Senior Citizen</option>
+              <option>Tatkal</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="flexible">Flexible dates</label>
+            <input type="checkbox" id="flexible" name="flexible">
+            <span class="hint">Also show trains one day either side</span>
+          </div>
+
+          <div class="field-row">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn" id="searchBtn">Search Trains</button>
+            <button type="reset" class="btn btn-plain">Reset</button>
+          </div>
+
+        </form>
+
+        <p class="hint" style="margin-bottom:0">
+          Already booked? <a href="pnr.html">Check PNR status</a> &nbsp;|&nbsp;
+          <a href="#">Cancel a booked ticket</a>
+        </p>
+
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Announcements</h2>
+      <div class="panel-body">
+        <table class="grid">
+          <tr><th style="width:110px">Date</th><th>Announcement</th></tr>
+          <tr><td>24 Sep</td><td>Additional coaches attached to Godavari Demo Express on weekends.</td></tr>
+          <tr><td>19 Sep</td><td>Platform change at Kazipet for Deccan Demo Rajdhani.</td></tr>
+          <tr><td>11 Sep</td><td>Demo portal user guide updated. Sample content only.</td></tr>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="portal-foot">
+  <div class="foot-links">
+    <a href="#">About us</a><a href="#">Terms of use</a><a href="#">Privacy policy</a>
+    <a href="#">Accessibility</a><a href="#">Site map</a><a href="#">Contact us</a>
+    <a href="#">RTI</a><a href="#">Feedback</a>
+  </div>
+  Yatra Demo Rail is a fictional website created only to test the Daari voice guide.
+  It is not affiliated with any real railway or travel company, and it cannot book real travel.
+</footer>
+
+<script src="app.js"></script>
+<script>
+/* Search page: fill the dropdown, remember what was typed, and move on
+   to the results page. */
+(function () {
+  'use strict';
+
+  var form = document.getElementById('searchForm');
+  var fromBox = document.getElementById('from');
+  var toBox = document.getElementById('to');
+  var dateBox = document.getElementById('date');
+  var clsBox = document.getElementById('cls');
+  var quotaBox = document.getElementById('quota');
+  var message = document.getElementById('message');
+
+  /* Build the class dropdown from the shared list. */
+  YDR.CLASSES.forEach(function (c) {
+    var option = document.createElement('option');
+    option.value = c.code;
+    option.textContent = c.name;
+    clsBox.appendChild(option);
+  });
+
+  /* Prefill from whatever was searched last time, so going "back" feels
+     natural. The date defaults to today. */
+  var saved = YDR.journey();
+  fromBox.value = saved.from || '';
+  toBox.value = saved.to || '';
+  dateBox.value = saved.date || YDR.todayIso();
+  clsBox.value = saved.cls || 'SL';
+  quotaBox.value = saved.quota || 'General';
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var from = fromBox.value.trim();
+    var to = toBox.value.trim();
+
+    if (from === '' || to === '') {
+      YDR.setMessage(message, 'bad', 'Please enter both the From station and the To station.');
+      return;
+    }
+    if (from.toLowerCase() === to.toLowerCase()) {
+      YDR.setMessage(message, 'bad', 'The From and To stations cannot be the same.');
+      return;
+    }
+
+    YDR.save('journey', {
+      from: from,
+      to: to,
+      date: dateBox.value,
+      cls: clsBox.value,
+      quota: quotaBox.value
+    });
+
+    window.location.href = 'results.html';
+  });
+}());
+</script>
+
+</body>
+</html>

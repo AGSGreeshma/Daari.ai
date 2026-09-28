@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trains Found — Yatra Demo Rail</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="demo-banner">Demo site for testing Daari — not a real booking service.</div>
+
+<header class="portal-head">
+  <div class="brand">
+    <span class="emblem" aria-hidden="true">YDR</span>
+    <div>
+      <div class="brand-name">Yatra Demo Rail</div>
+      <div class="brand-sub">Passenger Reservation System (Demonstration)</div>
+    </div>
+  </div>
+  <div class="head-right">
+    <a href="#">Login</a> | <a href="#">Register</a> | <a href="#">Agent Login</a> |
+    <a href="#">हिन्दी</a> | <a href="#">A-</a> <a href="#">A+</a>
+  </div>
+</header>
+
+<nav class="portal-nav">
+  <a href="index.html" class="here">Book Ticket</a>
+  <a href="pnr.html">PNR Status</a>
+  <a href="#">Train Schedule</a>
+  <a href="#">Fare Enquiry</a>
+  <a href="#">Seat Availability</a>
+  <a href="#">Cancellations</a>
+  <a href="#">Retiring Rooms</a>
+  <a href="#">Tourism Packages</a>
+  <a href="#">Help &amp; Support</a>
+</nav>
+
+<div class="notice-strip">
+  <b>Notice:</b> Availability shown is indicative sample data and does not refresh.
+</div>
+
+<div class="crumb">Home &rsaquo; Plan My Journey &rsaquo; Trains Found</div>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <h3>Refine</h3>
+    <ul>
+      <li><a href="index.html">Change search</a></li>
+      <li><a href="#">Departure before 12:00</a></li>
+      <li><a href="#">AC classes only</a></li>
+      <li><a href="#">Trains with pantry</a></li>
+      <li><a href="#">Sort by fare</a></li>
+      <li><a href="#">Sort by duration</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+
+    <div class="panel">
+      <h2>Trains Found</h2>
+      <div class="panel-body">
+
+        <p class="summary" id="journeyLine" style="margin-top:0"></p>
+
+        <table class="grid" id="trainTable">
+          <thead>
+            <tr>
+              <th>Train</th>
+              <th>Departs</th>
+              <th>Arrives</th>
+              <th>Duration</th>
+              <th>Availability</th>
+              <th>Fare</th>
+              <th style="width:120px">Action</th>
+            </tr>
+          </thead>
+          <tbody id="trainRows">
+            <!-- filled in by the script below -->
+          </tbody>
+        </table>
+
+        <p class="hint" style="margin-bottom:0">
+          Fares shown are base fares. Reservation charge and GST are added at the payment step.
+          Sample data on a demo site.
+        </p>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="portal-foot">
+  <div class="foot-links">
+    <a href="#">About us</a><a href="#">Terms of use</a><a href="#">Privacy policy</a>
+    <a href="#">Accessibility</a><a href="#">Site map</a><a href="#">Contact us</a>
+    <a href="#">RTI</a><a href="#">Feedback</a>
+  </div>
+  Yatra Demo Rail is a fictional website created only to test the Daari voice guide.
+  It is not affiliated with any real railway or travel company, and it cannot book real travel.
+</footer>
+
+<script src="app.js"></script>
+<script>
+/* Results page: list the invented trains for whatever was searched, and let
+   one of them be chosen. */
+(function () {
+  'use strict';
+
+  var journey = YDR.journey();
+  var rows = document.getElementById('trainRows');
+  var line = document.getElementById('journeyLine');
+
+  line.innerHTML =
+    '<strong>' + journey.from + '</strong> to <strong>' + journey.to + '</strong> &nbsp;|&nbsp; ' +
+    YDR.niceDate(journey.date) + ' &nbsp;|&nbsp; ' +
+    YDR.classByCode(journey.cls).name + ' &nbsp;|&nbsp; ' + journey.quota + ' quota ' +
+    '&nbsp; <a href="index.html">Change</a>';
+
+  YDR.TRAINS.forEach(function (train) {
+    var fare = YDR.fareFor(train, journey.cls);
+    var availClass = train.avail.indexOf('FEW') === 0 ? 'avail-few' : 'avail-yes';
+
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><span class="train-name">' + train.name + '</span><br>' +
+        '<span class="train-no">' + train.no + '</span></td>' +
+      '<td>' + train.dep + '</td>' +
+      '<td>' + train.arr + '</td>' +
+      '<td>' + train.dur + '</td>' +
+      '<td class="' + availClass + '">' + train.avail + '</td>' +
+      '<td class="fare">' + YDR.money(fare) + '</td>' +
+      '<td></td>';
+
+    /* The action cell holds a normal text button and an icon-only button.
+       The icon button has NO text of its own -- the glyph is hidden from
+       assistive tools, so its name can only come from aria-label. That is
+       deliberate: it is how Daari gets tested against real-world buttons
+       that show a symbol and nothing else. */
+    var actionCell = tr.lastChild;
+
+    var bookBtn = document.createElement('button');
+    bookBtn.type = 'button';
+    bookBtn.className = 'btn btn-small';
+    bookBtn.textContent = 'Book';
+    bookBtn.addEventListener('click', function () {
+      YDR.save('trainNo', train.no);
+      window.location.href = 'passenger.html';
+    });
+
+    var infoBtn = document.createElement('button');
+    infoBtn.type = 'button';
+    infoBtn.className = 'icon-btn';
+    infoBtn.setAttribute('aria-label', 'Train information for ' + train.name);
+    infoBtn.innerHTML = '<span aria-hidden="true">&#9432;</span>';
+    infoBtn.addEventListener('click', function () {
+      toggleInfo(tr, train);
+    });
+
+    actionCell.appendChild(bookBtn);
+    actionCell.appendChild(document.createTextNode(' '));
+    actionCell.appendChild(infoBtn);
+
+    rows.appendChild(tr);
+  });
+
+  /* Show or hide a small details row underneath a train. */
+  function toggleInfo(tr, train) {
+    var next = tr.nextSibling;
+    if (next && next.className === 'info-row') {
+      next.parentNode.removeChild(next);
+      return;
+    }
+    var info = document.createElement('tr');
+    info.className = 'info-row';
+    info.innerHTML =
+      '<td colspan="7">' + train.name + ' (' + train.no + ') runs daily. ' +
+      'Pantry car available. Stops at 6 intermediate stations. ' +
+      'Sample information on a demonstration site.</td>';
+    tr.parentNode.insertBefore(info, tr.nextSibling);
+  }
+}());
+</script>
+
+</body>
+</html>

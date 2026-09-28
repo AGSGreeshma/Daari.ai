@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PNR Status — Yatra Demo Rail</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="demo-banner">Demo site for testing Daari — not a real booking service.</div>
+
+<header class="portal-head">
+  <div class="brand">
+    <span class="emblem" aria-hidden="true">YDR</span>
+    <div>
+      <div class="brand-name">Yatra Demo Rail</div>
+      <div class="brand-sub">Passenger Reservation System (Demonstration)</div>
+    </div>
+  </div>
+  <div class="head-right">
+    <a href="#">Login</a> | <a href="#">Register</a> | <a href="#">Agent Login</a> |
+    <a href="#">हिन्दी</a> | <a href="#">A-</a> <a href="#">A+</a>
+  </div>
+</header>
+
+<nav class="portal-nav">
+  <a href="index.html">Book Ticket</a>
+  <a href="pnr.html" class="here">PNR Status</a>
+  <a href="#">Train Schedule</a>
+  <a href="#">Fare Enquiry</a>
+  <a href="#">Seat Availability</a>
+  <a href="#">Cancellations</a>
+  <a href="#">Retiring Rooms</a>
+  <a href="#">Tourism Packages</a>
+  <a href="#">Help &amp; Support</a>
+</nav>
+
+<div class="notice-strip">
+  <b>Notice:</b> Only bookings made in this browser can be found, because this demo has no server.
+</div>
+
+<div class="crumb">Home &rsaquo; PNR Status</div>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <h3>Enquiries</h3>
+    <ul>
+      <li><a href="#">Train running status</a></li>
+      <li><a href="#">Seat availability</a></li>
+      <li><a href="#">Fare enquiry</a></li>
+      <li><a href="#">Platform enquiry</a></li>
+      <li><a href="index.html">Book a new ticket</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+
+    <div class="panel">
+      <h2>Check PNR Status</h2>
+      <div class="panel-body">
+
+        <div id="message" class="msg" style="display:none"></div>
+
+        <form id="pnrForm" novalidate>
+          <div class="field-row">
+            <label for="pnr">PNR number <span class="req">*</span></label>
+            <input type="text" id="pnr" name="pnr" maxlength="10"
+                   autocomplete="off" style="min-width:170px">
+            <button type="submit" class="btn" id="checkBtn">Check status</button>
+          </div>
+          <p class="hint" id="lastHint" style="margin:0"></p>
+        </form>
+
+      </div>
+    </div>
+
+    <div class="panel" id="resultPanel" style="display:none">
+      <h2>PNR Enquiry Result</h2>
+      <div class="panel-body">
+        <dl class="summary" id="resultSummary" style="margin:0"></dl>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="portal-foot">
+  <div class="foot-links">
+    <a href="#">About us</a><a href="#">Terms of use</a><a href="#">Privacy policy</a>
+    <a href="#">Accessibility</a><a href="#">Site map</a><a href="#">Contact us</a>
+    <a href="#">RTI</a><a href="#">Feedback</a>
+  </div>
+  Yatra Demo Rail is a fictional website created only to test the Daari voice guide.
+  It is not affiliated with any real railway or travel company, and it cannot book real travel.
+</footer>
+
+<script src="app.js"></script>
+<script>
+/* PNR page: look up a booking that was saved earlier in this browser. */
+(function () {
+  'use strict';
+
+  var form = document.getElementById('pnrForm');
+  var pnrBox = document.getElementById('pnr');
+  var message = document.getElementById('message');
+  var resultPanel = document.getElementById('resultPanel');
+  var resultSummary = document.getElementById('resultSummary');
+  var lastHint = document.getElementById('lastHint');
+
+  /* Helpful on a demo site: remind the tester of the PNR they just got, so
+     they do not have to write it down. */
+  var last = YDR.lastPnr();
+  if (last) {
+    lastHint.innerHTML = 'Your most recent demo booking was PNR <strong>' + last + '</strong>.';
+  } else {
+    lastHint.textContent = 'No booking has been made in this browser yet.';
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var typed = pnrBox.value.trim();
+
+    if (typed.length !== 10 || /\D/.test(typed)) {
+      YDR.setMessage(message, 'bad', 'Please enter the 10-digit PNR number.');
+      resultPanel.style.display = 'none';
+      return;
+    }
+
+    var booking = YDR.getBooking(typed);
+
+    if (!booking) {
+      YDR.setMessage(message, 'bad',
+        'PNR ' + typed + ' was not found. Only bookings made in this browser can be checked.');
+      resultPanel.style.display = 'none';
+      return;
+    }
+
+    YDR.setMessage(message, 'ok', 'PNR ' + booking.pnr + ' found.');
+
+    resultSummary.innerHTML =
+      '<dt>PNR</dt><dd>' + booking.pnr + '</dd>' +
+      '<dt>Current status</dt><dd>' + booking.status + '</dd>' +
+      '<dt>Passenger</dt><dd>' + booking.name + ', ' + booking.age + ', ' + booking.gender + '</dd>' +
+      '<dt>Train</dt><dd>' + booking.trainName + ' (' + booking.trainNo + ')</dd>' +
+      '<dt>Journey</dt><dd>' + booking.from + ' to ' + booking.to + '</dd>' +
+      '<dt>Date</dt><dd>' + YDR.niceDate(booking.date) + '</dd>' +
+      '<dt>Departs / Arrives</dt><dd>' + booking.dep + ' / ' + booking.arr + '</dd>' +
+      '<dt>Class</dt><dd>' + YDR.classByCode(booking.cls).name + '</dd>' +
+      '<dt>Coach / Seat</dt><dd>' + booking.coach + ' / ' + booking.seat + '</dd>' +
+      '<dt>Amount paid</dt><dd>' + YDR.money(booking.total) + '</dd>';
+
+    resultPanel.style.display = 'block';
+  });
+}());
+</script>
+
+</body>
+</html>
