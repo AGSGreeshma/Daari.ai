@@ -88,9 +88,13 @@ module.exports = async (req, res) => {
         voice: TTS_VOICE,
         input: text,
         response_format: 'mp3',
-        /* Slowly. Same reason the browser voices run at 0.8: the listener may
-           be hearing this instruction for the first time. */
-        speed: 0.85
+        /* Left at normal speed on purpose.
+           It was 0.85, for the same reason the browser voices run at 0.8 -- the
+           listener may be hearing the instruction for the first time. But the
+           Telugu output was unclear and seemed to skip words, and slowed
+           synthesis is a plausible cause of exactly that. If Telugu speech is
+           re-enabled, try it at this speed first before blaming the voice. */
+        speed: Number(process.env.OPENAI_TTS_SPEED || 1)
       }),
       signal: controller.signal
     });

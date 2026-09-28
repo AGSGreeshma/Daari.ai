@@ -363,9 +363,13 @@
   /* Show the instruction as large text. textContent, never innerHTML: the
      words can come from a web page or later from a model, and neither gets
      to put markup on the screen. */
-  function showCaption(text, stepLabel, kind) {
+  function showCaption(text, stepLabel, kind, lang) {
     ensureOverlay();
     caption.className = 'caption' + (kind ? ' ' + kind : '');
+    /* The language is set on the element so CSS can give Telugu more room --
+       it is the only channel for a Telugu user, since the fetched voice was
+       not clear enough to use. */
+    if (lang) { caption.setAttribute('lang', lang); }
     captionStep.textContent = stepLabel || '';
     captionStep.style.display = stepLabel ? 'block' : 'none';
     captionSay.textContent = text || '';
@@ -553,7 +557,7 @@
      script does not. If the panel is closed there is nobody listening, and
      that is fine: the caption alone still carries the instruction. */
   function announce(text, stepLabel, kind, lang) {
-    showCaption(text, stepLabel, kind);
+    showCaption(text, stepLabel, kind, lang);
     send({
       type: 'DAARI_SPEAK',
       text: text,

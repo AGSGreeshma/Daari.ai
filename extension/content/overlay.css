@@ -69,6 +69,14 @@
   font-weight: 600;
 }
 
+/* Telugu is read, not spoken -- the fetched voice was not clear enough, so the
+   caption is now the ONLY channel for the primary persona. It gets more room.
+   Telugu script also needs a little more height than Latin at the same size. */
+.caption:lang(te) .say {
+  font-size: 28px;
+  line-height: 1.55;
+}
+
 .caption .step {
   font-size: 13px;
   letter-spacing: 0.8px;

@@ -295,7 +295,10 @@
        has even begun. */
     chime();
 
-    if (code === 'te') {
+    /* Fetched Telugu speech is off by default -- it was not clear enough, and a
+       bad voice is worse than silence for the primary persona. The chime above
+       plus the large Telugu caption is the stated fallback in CLAUDE.md. */
+    if (code === 'te' && DAARI_CONFIG.TELUGU_TTS) {
       /* Let the chime finish first, or the two overlap and neither is clear. */
       window.setTimeout(function () {
         DAARI_TTS.speak(text, code).then(function (spoke) {
@@ -314,12 +317,20 @@
       parts.push('<b>' + entry.english + ':</b> ' +
         (voice ? voice.name : 'no voice installed, captions and a chime only'));
     });
-    var note = pickVoice('te')
-      ? 'Telugu has a local voice, so no audio needs fetching.'
-      : ('No local Telugu voice, so Telugu is fetched from the Daari API as audio: ' +
-         'a chime, then the sentence. ' + DAARI_TTS.cached() + ' phrase(s) cached so far' +
-         (DAARI_TTS.lastError() ? '. Last attempt failed: ' + DAARI_TTS.lastError() +
-            ' - the large caption is carrying it instead.' : '.'));
+    var note;
+    if (pickVoice('te')) {
+      note = 'Telugu has a local voice, so nothing needs fetching.';
+    } else if (DAARI_CONFIG.TELUGU_TTS) {
+      note = 'No local Telugu voice, so Telugu is fetched as audio: a chime, then the ' +
+        'sentence. ' + DAARI_TTS.cached() + ' phrase(s) cached' +
+        (DAARI_TTS.lastError() ? '. Last attempt failed: ' + DAARI_TTS.lastError() +
+          ' - the large caption is carrying it instead.' : '.');
+    } else {
+      note = '<b>Telugu is read, not spoken.</b> Fetched Telugu speech was turned off ' +
+        'because it was not clear enough, and a wrong-sounding voice is worse than ' +
+        'silence. A Telugu step plays a short chime and shows large Telugu text. ' +
+        'Set TELUGU_TTS to true in config.js to try it again.';
+    }
 
     el.voiceStatus.innerHTML = parts.join('<br>') + '<br><br>' + note;
   }
