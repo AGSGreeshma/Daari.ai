@@ -14,6 +14,7 @@
 
 const openPanelBtn = document.getElementById('openPanel');
 const debugBtn = document.getElementById('debug');
+const snapshotBtn = document.getElementById('snapshot');
 const testBtn = document.getElementById('test');
 const result = document.getElementById('result');
 const urlLine = document.getElementById('url');
@@ -109,6 +110,40 @@ debugBtn.addEventListener('click', async () => {
     show('bad', e.message);
   } finally {
     debugBtn.disabled = false;
+  }
+});
+
+// ------------------------------------------------------- Save page snapshot
+//
+// Captures exactly what the real serializer sees on the real page, so the test
+// cases in tests/cases/ are grounded in Chrome rather than written by hand.
+// Drop the downloaded file into tests/snapshots/.
+snapshotBtn.addEventListener('click', async () => {
+  snapshotBtn.disabled = true;
+  try {
+    const reply = await sendToPage({ type: 'DAARI_SNAPSHOT' });
+    if (!reply || !reply.ok) { throw new Error('The page did not answer.'); }
+
+    // A stable name from the page, so walking the flow twice overwrites rather
+    // than piling up: "index.json", "passenger.json", "passenger-otp.json".
+    const suffix = reply.elements.some((e) => /demo one-time/i.test(e.name || ''))
+      ? '-otp' : '';
+    const name = reply.page + suffix + '.json';
+
+    const blob = new Blob([JSON.stringify(reply.snapshot, null, 2)],
+                          { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    await chrome.downloads.download({ url, filename: 'daari-snapshots/' + name });
+
+    show('good',
+      'Saved ' + name + '\n' +
+      reply.elements.length + ' elements captured.\n\n' +
+      'It is in your Downloads folder, under daari-snapshots.\n' +
+      'Move it into tests/snapshots/.');
+  } catch (e) {
+    show('bad', e.message);
+  } finally {
+    snapshotBtn.disabled = false;
   }
 });
 

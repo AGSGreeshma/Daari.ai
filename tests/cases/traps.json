@@ -1,0 +1,66 @@
+{
+  "_comment": "The hard cases, with NO recipe hint. The model is on its own against the things that actually break element-picking on real websites. If these pass with no hint, the AI is genuinely reading the page rather than leaning on the recipe.",
+
+  "cases": [
+    {
+      "id": "trap-age-collision-no-hint",
+      "snapshot": "passenger",
+      "goal": "type the traveller's age",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Age", "gate": false },
+      "note": "No hint at all. 'Tourism Packages' in the menu contains a-g-e, and comes first in the document."
+    },
+    {
+      "id": "trap-icon-only-button",
+      "snapshot": "results",
+      "goal": "show me more about the first train",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Train information", "gate": false },
+      "note": "The icon-only button. Its glyph is aria-hidden, so the only name it has is its aria-label."
+    },
+    {
+      "id": "trap-unlabelled-mobile",
+      "snapshot": "passenger",
+      "goal": "enter the mobile number",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Mobile number", "gate": false },
+      "note": "Placeholder but no label. Must not be confused with 'Email address (optional)' beside it."
+    },
+    {
+      "id": "trap-pay-no-hint-GATE",
+      "snapshot": "payment",
+      "goal": "pay for the ticket",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Pay", "gate": true },
+      "note": "GATE MUST FIRE even with no recipe. The gate reads the element's real name, not a flag."
+    },
+    {
+      "id": "trap-cancel-a-ticket-must-not-gate",
+      "snapshot": "index",
+      "goal": "I want to read the rules for cancelling a ticket",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Cancel a ticket", "gate": false },
+      "note": "DOCUMENTS CURRENT BEHAVIOUR, and it is arguably wrong. The gate list holds 'cancel ticket'; this link reads 'Cancel a ticket', so the 'a' means it does not match and no gate fires. It is only a link to rules here, so nothing is lost - but on a real site a 'Cancel a booking' button would slip through the same gap. Flagged in the report for a decision."
+    },
+    {
+      "id": "trap-gender-dropdown-no-hint",
+      "snapshot": "passenger",
+      "goal": "choose whether the passenger is male or female",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Gender", "gate": false },
+      "note": "Must pick the Gender dropdown, not the Berth preference one next to it."
+    }
+  ]
+}

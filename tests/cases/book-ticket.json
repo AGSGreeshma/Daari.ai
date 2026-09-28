@@ -1,0 +1,159 @@
+{
+  "_comment": "Booking-flow cases, in all three languages. Each one names a snapshot in tests/snapshots/ (captured from the real practice pages with the real serializer via the popup's Save page snapshot button), the goal the user spoke, and which recipe step's hint to pass in. Expected names are matched with Daari's own scorer at >= 80, so 'Pay' matches 'Pay ₹378' and the fare can change without breaking the test.",
+
+  "cases": [
+    {
+      "id": "book-te-from",
+      "snapshot": "index",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 0,
+      "expect": { "element": "From station", "gate": false }
+    },
+    {
+      "id": "book-hi-from",
+      "snapshot": "index",
+      "goal": "मुझे ट्रेन टिकट बुक करना है",
+      "lang": "hi",
+      "recipe": "book-ticket",
+      "step": 0,
+      "expect": { "element": "From station", "gate": false }
+    },
+    {
+      "id": "book-en-to",
+      "snapshot": "index",
+      "goal": "I want to book a train ticket to Kazipet",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 1,
+      "expect": { "element": "To station", "gate": false },
+      "note": "Must not pick 'Contact a station' from the sidebar."
+    },
+    {
+      "id": "book-te-class",
+      "snapshot": "index",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 2,
+      "expect": { "element": "Class", "gate": false }
+    },
+    {
+      "id": "book-en-search",
+      "snapshot": "index",
+      "goal": "I want to book a train ticket",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 3,
+      "expect": { "element": "Search Trains", "gate": false }
+    },
+    {
+      "id": "book-te-book-button",
+      "snapshot": "results",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 4,
+      "expect": { "element": "Book", "gate": false },
+      "note": "Must beat the 'Book Ticket' menu item, which merely starts with the same word."
+    },
+    {
+      "id": "book-hi-book-button",
+      "snapshot": "results",
+      "goal": "मुझे ट्रेन टिकट बुक करना है",
+      "lang": "hi",
+      "recipe": "book-ticket",
+      "step": 4,
+      "expect": { "element": "Book", "gate": false },
+      "note": "The 'Cancellations' menu item is on this page and must NOT trigger the confirm gate."
+    },
+    {
+      "id": "book-en-name",
+      "snapshot": "passenger",
+      "goal": "I want to book a train ticket",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 5,
+      "expect": { "element": "Passenger name", "gate": false }
+    },
+    {
+      "id": "book-hi-age",
+      "snapshot": "passenger",
+      "goal": "मुझे ट्रेन टिकट बुक करना है",
+      "lang": "hi",
+      "recipe": "book-ticket",
+      "step": 6,
+      "expect": { "element": "Age", "gate": false },
+      "note": "THE TRAP: 'Tourism Packages' in the menu contains the letters a-g-e."
+    },
+    {
+      "id": "book-te-gender",
+      "snapshot": "passenger",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 7,
+      "expect": { "element": "Gender", "gate": false }
+    },
+    {
+      "id": "book-en-mobile",
+      "snapshot": "passenger",
+      "goal": "I want to book a train ticket",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 8,
+      "expect": { "element": "Mobile number", "gate": false },
+      "note": "This field has a placeholder but NO label, so its name can only come from the placeholder."
+    },
+    {
+      "id": "book-hi-send-otp",
+      "snapshot": "passenger",
+      "goal": "मुझे ट्रेन टिकट बुक करना है",
+      "lang": "hi",
+      "recipe": "book-ticket",
+      "step": 9,
+      "expect": { "element": "Send OTP", "gate": false }
+    },
+    {
+      "id": "book-te-enter-otp",
+      "snapshot": "passenger-otp",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 10,
+      "expect": { "element": "Enter OTP", "gate": false },
+      "note": "Sensitive step. The snapshot was taken with a code on screen; the code must appear nowhere in it."
+    },
+    {
+      "id": "book-en-continue-to-payment-GATE",
+      "snapshot": "passenger-otp",
+      "goal": "I want to book a train ticket",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 11,
+      "expect": { "element": "Continue to Payment", "gate": true },
+      "note": "GATE MUST FIRE, on the word 'payment' - a button no recipe author flagged."
+    },
+    {
+      "id": "book-te-card-number",
+      "snapshot": "payment",
+      "goal": "నాకు ట్రైన్ టికెట్ బుక్ చేయాలి",
+      "lang": "te",
+      "recipe": "book-ticket",
+      "step": 12,
+      "expect": { "element": "Card number", "gate": false },
+      "note": "Sensitive, but not a gate: typing a card number costs nothing. Pressing Pay does."
+    },
+    {
+      "id": "book-en-pay-GATE",
+      "snapshot": "payment",
+      "goal": "I want to book a train ticket",
+      "lang": "en",
+      "recipe": "book-ticket",
+      "step": 13,
+      "expect": { "element": "Pay", "gate": true },
+      "note": "GATE MUST FIRE. Expected name is just 'Pay' so the fare can change."
+    }
+  ]
+}

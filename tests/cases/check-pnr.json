@@ -1,0 +1,43 @@
+{
+  "_comment": "The second recipe. Proves Daari can follow more than one route, and that a spoken goal picks the right one.",
+
+  "cases": [
+    {
+      "id": "pnr-te-menu-link",
+      "snapshot": "index",
+      "goal": "PNR status చెక్ చేయాలి",
+      "lang": "te",
+      "recipe": "check-pnr",
+      "step": 0,
+      "expect": { "element": "PNR Status", "gate": false },
+      "note": "A mixed Telugu and English goal, which is how people actually speak."
+    },
+    {
+      "id": "pnr-en-number-field",
+      "snapshot": "pnr",
+      "goal": "check my PNR status",
+      "lang": "en",
+      "recipe": "check-pnr",
+      "step": 1,
+      "expect": { "element": "PNR number", "gate": false }
+    },
+    {
+      "id": "pnr-te-number-field",
+      "snapshot": "pnr",
+      "goal": "నా PNR స్టేటస్ చూడాలి",
+      "lang": "te",
+      "recipe": "check-pnr",
+      "step": 1,
+      "expect": { "element": "PNR number", "gate": false }
+    },
+    {
+      "id": "pnr-hi-check-button",
+      "snapshot": "pnr",
+      "goal": "मेरा PNR स्टेटस देखना है",
+      "lang": "hi",
+      "recipe": "check-pnr",
+      "step": 2,
+      "expect": { "element": "Check status", "gate": false }
+    }
+  ]
+}

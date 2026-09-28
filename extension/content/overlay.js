@@ -754,6 +754,31 @@
       return;
     }
 
+    /* Capture what the real serializer sees, for tests/snapshots/. Labels only,
+       exactly like every other payload -- a snapshot is a test fixture that
+       gets committed to a public repo, so it had better contain nothing the
+       user typed. */
+    if (message.type === 'DAARI_SNAPSHOT') {
+      var captured = serializePage();
+      var forbidden = DAARI_FIND_FORBIDDEN_FIELDS(captured);
+      if (forbidden.length) {
+        sendResponse({ ok: false, error: 'refusing: found ' + forbidden.join(', ') });
+        return;
+      }
+      sendResponse({
+        ok: true,
+        page: DAARI_PAGE_OF(location.href),
+        elements: captured,
+        snapshot: {
+          url: location.href,
+          title: document.title || '',
+          capturedAt: new Date().toISOString(),
+          elements: captured
+        }
+      });
+      return;
+    }
+
     if (message.type === 'DAARI_DEBUG_SERIALIZE') {
       var list = serializePage();
 
