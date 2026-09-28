@@ -1,0 +1,90 @@
+/* Daari's ring and caption.
+
+   These rules are loaded INTO our Shadow DOM, not into the page, so the
+   website's own stylesheet cannot reach them and ours cannot damage the page.
+
+   overlay.js fetches this file and applies it as a "constructable
+   stylesheet". That route was chosen over a <link> tag because a website
+   with a strict Content-Security-Policy can block an extension stylesheet
+   link, and a constructable stylesheet is not subject to page CSP at all. */
+
+/* Everything sits inside a full-screen, click-through layer. pointer-events
+   none is essential: the user must be able to click the page THROUGH our
+   overlay, because Daari never clicks for them. */
+.layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------- the pointing finger: a pulsing orange ring ---------- */
+.ring {
+  position: absolute;
+  display: none;
+  border: 4px solid #ff8c1a;
+  border-radius: 9px;
+  transform-origin: center;
+  animation: pulse 1.4s ease-in-out infinite;
+  box-shadow:
+    0 0 0 4px rgba(255, 140, 26, 0.30),
+    0 0 20px 7px rgba(255, 140, 26, 0.55),
+    inset 0 0 12px rgba(255, 140, 26, 0.35);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.62; transform: scale(1.035); }
+}
+
+/* ---------- the caption bubble ---------- */
+.caption {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  display: none;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 88vw;
+  padding: 16px 24px;
+  border: 3px solid #ff8c1a;
+  border-radius: 14px;
+  background: #15171a;
+  color: #ffffff;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+
+  /* Nirmala UI ships with Windows and covers Telugu and Devanagari, so
+     Telugu and Hindi captions render properly rather than as empty boxes. */
+  font-family: "Nirmala UI", "Noto Sans Telugu", "Noto Sans Devanagari",
+               "Segoe UI", system-ui, sans-serif;
+}
+
+/* The instruction itself. Never below 20px -- these users are elderly or
+   new to computers, and the caption is a full channel alongside the voice,
+   not a subtitle. */
+.caption .say {
+  font-size: 23px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.caption .step {
+  font-size: 13px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #ffb866;
+  margin-bottom: 7px;
+}
+
+.caption.done { border-color: #37b24d; }
+.caption.done .say { font-size: 27px; }
+.caption.done .step { color: #8ce99a; }
+
+.caption.lost { border-color: #ffd43b; }
+
+/* Some people get motion sick, and a pulsing ring is exactly the kind of
+   thing that does it. Honour the system setting. */
+@media (prefers-reduced-motion: reduce) {
+  .ring { animation: none; }
+}

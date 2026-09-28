@@ -19,6 +19,7 @@
     button {
       width: 100%;
       padding: 12px;
+      margin-bottom: 8px;
       font-size: 16px;
       font-family: inherit;
       border: 0;
@@ -28,11 +29,27 @@
       cursor: pointer;
     }
     button:disabled { background: #9ab5a7; cursor: default; }
+    /* The demo button is the main action, so it leads. */
+    #startDemo { background: #c25a00; font-size: 17px; font-weight: bold; }
+    #startDemo:hover { background: #a54c00; }
+    /* The two developer tools are visibly secondary. */
+    #debug, #test { background: #4a5a68; font-size: 14px; padding: 10px; }
+    #debug:hover, #test:hover { background: #3a4a58; }
+
+    .divider {
+      margin: 14px 0 10px;
+      border-top: 1px solid #e0dcd0;
+      font-size: 11px;
+      color: #8a8a8a;
+      padding-top: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
     #result {
-      margin-top: 14px;
+      margin-top: 10px;
       padding: 12px;
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 13.5px;
       line-height: 1.45;
       display: none;
       white-space: pre-wrap;
@@ -40,14 +57,20 @@
     }
     #result.good { display: block; background: #e6f5ec; border: 1px solid #1f6f4a; }
     #result.bad  { display: block; background: #fdecea; border: 1px solid #b3261e; }
+    #result.info { display: block; background: #eef4fb; border: 1px solid #1a4f8a; }
     .url { margin-top: 12px; font-size: 11px; color: #8a8a8a; word-break: break-all; }
   </style>
 </head>
 <body>
   <h1>Daari</h1>
-  <p class="sub">Phase 0 &mdash; setup check</p>
+  <p class="sub">Phase 2 &mdash; ring, caption and local verify</p>
 
+  <button id="startDemo">Start demo</button>
+
+  <div class="divider">Developer tools</div>
+  <button id="debug">Show what Daari sees</button>
   <button id="test">Test connection</button>
+
   <div id="result"></div>
   <p class="url" id="url"></p>
 
