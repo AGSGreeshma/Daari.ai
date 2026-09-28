@@ -390,22 +390,108 @@
      VERIFY  -- local, free, no AI involved
      ================================================================= */
 
+  /* ---- matching a step's words to an element on this page ---------------
+
+     Steps target elements BY NAME, never by index. An index is a property of
+     one particular page at one particular moment; "Send OTP" is a property of
+     the thing itself. */
+
+  function normalizeName(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[*:]/g, ' ')          /* "Age *" and "Age:" both become "age" */
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function escapeForRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /* How well does this element's name match what we are looking for?
+
+     Plain substring matching is not enough, and the practice site proves it:
+     looking for "age" on the passenger page, an indexOf would match "Tourism
+     Packages" up in the menu long before reaching the Age box. So an exact
+     match wins, then a match at the start, then a whole word, and only then a
+     substring. */
+  function nameScore(name, want) {
+    var have = normalizeName(name);
+    var need = normalizeName(want);
+    if (!have || !need) { return 0; }
+    if (have === need) { return 100; }
+    if (have.indexOf(need) === 0) { return 80; }
+    if (new RegExp('(^|\\s)' + escapeForRegExp(need) + '($|\\s)').test(have)) { return 60; }
+    if (have.indexOf(need) !== -1) { return 30; }
+    return 0;
+  }
+
+  /* Which element is this step talking about? -1 when nothing matches, and
+     Daari then says it is not sure rather than pointing at a guess.
+
+     Labels are tried in priority order: if the first one matches anything at
+     all, later ones are not consulted. Within a label the best score wins,
+     and ties go to whatever comes first -- which, after serializePage, means
+     whatever is on screen. */
+  function resolveByName(list, labels) {
+    for (var l = 0; l < labels.length; l++) {
+      var bestIndex = -1;
+      var bestScore = 0;
+      for (var i = 0; i < list.length; i++) {
+        var score = nameScore(list[i].name, labels[l]);
+        if (score > bestScore) { bestScore = score; bestIndex = i; }
+      }
+      if (bestIndex !== -1) { return bestIndex; }
+    }
+    return -1;
+  }
+
+  /* Text the user can actually see. innerText respects display:none, which
+     textContent does not -- and that difference matters: the practice site's
+     OTP message sits in the page from the start, just hidden. Matching on
+     textContent would declare the step finished before the user pressed
+     anything. */
+  function visiblePageText() {
+    return (document.body && (document.body.innerText || document.body.textContent)) || '';
+  }
+
   /* Watch for a step being finished. Returns a function that stops watching.
 
-     Rules understood: "clicked", "field_filled", "url_changed", each
-     optionally written as "clicked:3" to name a specific element.
+     The whole vocabulary, evaluated here in the page, for free:
 
-     Note how "clicked" works: we LISTEN for the user's own click. Daari
-     never produces one. */
+       clicked[:name]           the user clicked it, themselves
+       field_filled[:name]      the box has something in it
+       element_gone:name        it is no longer on the page
+       text_appears:some words  those words became visible
+
+     With no :name, the rule applies to the step's own element.
+
+     url_changed is deliberately NOT handled here. A page that is navigating
+     away is being destroyed, and a message sent from it may never arrive. The
+     worker settles that rule instead, by comparing the URL a step started on
+     against the URL of the next page that reports in. Nothing races.
+
+     Note how "clicked" works: we LISTEN for the user's own click, in the
+     capture phase, and never call preventDefault. Daari produces no clicks. */
   function watchForDone(rule, defaultIndex, onDone) {
-    var bits = String(rule || '').split(':');
-    var kind = bits[0];
-    var index = bits.length > 1 ? Number(bits[1]) : defaultIndex;
-    var entry = lastList[index];
-    var el = entry ? entry.el : null;
+    var raw = String(rule || '');
+    var colon = raw.indexOf(':');
+    var kind = colon === -1 ? raw : raw.slice(0, colon);
+    var argument = colon === -1 ? '' : raw.slice(colon + 1);
+
     var finished = false;
-    var startHref = location.href;
-    var urlTimer = null;
+    var observer = null;
+    var recheckTimer = null;
+
+    /* Which element does this rule watch? Its own, unless named otherwise. */
+    var el = null;
+    if (kind === 'clicked' || kind === 'field_filled') {
+      var index = defaultIndex;
+      if (argument) {
+        index = resolveByName(lastList.map(function (e) { return e.data; }), [argument]);
+      }
+      el = lastList[index] ? lastList[index].el : null;
+    }
 
     function finish() {
       if (finished) { return; }
@@ -423,8 +509,24 @@
       if (el && isFilled(el)) { finish(); }
     }
 
-    function checkUrl() {
-      if (location.href !== startHref) { finish(); }
+    /* Both of the watch-the-whole-page rules go through here, debounced,
+       because a busy page can fire hundreds of mutations a second and
+       innerText is not cheap. */
+    function recheck() {
+      if (recheckTimer !== null) { return; }
+      recheckTimer = window.setTimeout(function () {
+        recheckTimer = null;
+        if (finished) { return; }
+
+        if (kind === 'text_appears') {
+          if (visiblePageText().toLowerCase().indexOf(argument.toLowerCase()) !== -1) {
+            finish();
+          }
+        } else if (kind === 'element_gone') {
+          var list = serializePage();
+          if (resolveByName(list, [argument]) === -1) { finish(); }
+        }
+      }, 200);
     }
 
     function stop() {
@@ -434,17 +536,17 @@
         el.removeEventListener('change', onInput);
         el.removeEventListener('blur', onInput);
       }
-      if (urlTimer !== null) { window.clearInterval(urlTimer); urlTimer = null; }
+      if (observer) { observer.disconnect(); observer = null; }
+      if (recheckTimer !== null) { window.clearTimeout(recheckTimer); recheckTimer = null; }
     }
 
     if (kind === 'clicked') {
-      /* Capture phase, so we still hear it even if the page stops the event
-         bubbling. We never call preventDefault -- the click is the user's. */
       document.addEventListener('click', onClick, true);
 
     } else if (kind === 'field_filled') {
       if (el && isFilled(el)) {
-        /* Already done before we started watching. */
+        /* Already done before we began watching. Deferred by a tick so the
+           caller has finished wiring up before onDone fires. */
         window.setTimeout(finish, 0);
       } else if (el) {
         el.addEventListener('input', onInput);
@@ -452,48 +554,31 @@
         el.addEventListener('blur', onInput);
       }
 
-    } else if (kind === 'url_changed') {
-      urlTimer = window.setInterval(checkUrl, 250);
+    } else if (kind === 'text_appears' || kind === 'element_gone') {
+      observer = new MutationObserver(recheck);
+      observer.observe(document.documentElement, {
+        childList: true, subtree: true, characterData: true,
+        attributes: true, attributeFilter: ['style', 'class', 'hidden']
+      });
+      recheck();   /* it may already be true */
     }
 
     return stop;
   }
 
   /* =================================================================
-     TEMPORARY DEMO DRIVER
-     -----------------------------------------------------------------
-     Phase 2 only. This hardcoded walk-through exists to prove the ring,
-     the caption and the local verification all work together, with no AI
-     and no voice in the way.
+     THE STEP RUNNER
 
-     It is DELETED in Phase 4, when the real step machine moves into
-     background.js. Session state does not belong in a content script:
-     this file is destroyed on every navigation.
+     Phase 2's hardcoded demo driver is gone. The page no longer decides
+     anything about the flow: it asks the worker what to do, does that one
+     thing, and reports back. All the deciding, and all the remembering,
+     lives in background.js -- because this file is destroyed on every
+     navigation, and a booking flow is nothing but navigations.
      ================================================================= */
 
-  /* The words for these steps live in strings.js, matched BY INDEX, so the
-     spoken sentence and the written caption can never drift apart. Logic
-     here, text there. */
-  var DEMO_STEPS = [
-    { look_for: ['from station'],  done_when: 'field_filled' },
-    { look_for: ['to station'],    done_when: 'field_filled' },
-    { look_for: ['search trains'], done_when: 'clicked' }
-  ];
-
-  var demoStopWatching = null;
-
-  /* Which language to caption and speak in. Telugu by default, matching the
-     side panel. Kept in step with the panel by watching storage, so switching
-     language takes effect on the next instruction. */
-  var demoLang = 'te';
-
-  chrome.storage.local.get({ lang: 'te' }).then(function (saved) {
-    demoLang = saved.lang;
-  }).catch(function () { /* keep the default */ });
-
-  chrome.storage.onChanged.addListener(function (changes, area) {
-    if (area === 'local' && changes.lang) { demoLang = changes.lang.newValue; }
-  });
+  var stopWatching = null;      /* how to stop watching the current step */
+  var retryObserver = null;     /* watching for a late-arriving element */
+  var currentStepPayload = null;
 
   /* Say it and show it, in one call.
 
@@ -502,88 +587,153 @@
      that is the one part of Daari that survives a page navigation -- this
      script does not. If the panel is closed there is nobody listening, and
      that is fine: the caption alone still carries the instruction. */
-  function announce(text, stepLabel, kind) {
+  function announce(text, stepLabel, kind, lang) {
     showCaption(text, stepLabel, kind);
-    try {
-      var sending = chrome.runtime.sendMessage({
-        type: 'DAARI_SPEAK',
-        text: text,
-        stepLabel: stepLabel,
-        lang: demoLang
-      });
-      if (sending && sending.catch) { sending.catch(function () {}); }
-    } catch (e) {
-      /* Panel not open. Captions carry on regardless. */
-    }
-  }
-
-  /* Find the element a step is talking about, by matching its labels against
-     the accessible names on the page. A small ancestor of the recipe
-     resolver that arrives in Phase 6. */
-  function findByLabels(list, labels) {
-    for (var l = 0; l < labels.length; l++) {
-      var want = labels[l].toLowerCase();
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].name.toLowerCase().indexOf(want) !== -1) { return i; }
-      }
-    }
-    return -1;
-  }
-
-  function stopDemo() {
-    if (demoStopWatching) { demoStopWatching(); demoStopWatching = null; }
-    clearAll();
-  }
-
-  function runDemoStep(n) {
-    if (demoStopWatching) { demoStopWatching(); demoStopWatching = null; }
-
-    var T = window.DAARI_T;
-    var S = window.DAARI_STRINGS;
-    var stepLabel = T(S.ui.stepOf, demoLang, { n: n + 1, total: DEMO_STEPS.length });
-
-    if (n >= DEMO_STEPS.length) {
-      hideRing();
-      announce('✅ ' + T(S.ui.wellDone, demoLang), T(S.ui.finished, demoLang), 'done');
-      window.setTimeout(clearAll, 7000);
-      return;
-    }
-
-    var step = DEMO_STEPS[n];
-    var list = serializePage();
-    var index = findByLabels(list, step.look_for);
-
-    if (index === -1) {
-      /* The failure voice from CLAUDE.md. Never a confident wrong pointer. */
-      hideRing();
-      announce(T(S.ui.notSure, demoLang), stepLabel, 'lost');
-      return;
-    }
-
-    highlight(index);
-    announce(T(S.demoSay[n], demoLang), stepLabel, '');
-
-    demoStopWatching = watchForDone(step.done_when, index, function () {
-      runDemoStep(n + 1);
+    send({
+      type: 'DAARI_SPEAK',
+      text: text,
+      stepLabel: stepLabel,
+      lang: lang || (currentStepPayload && currentStepPayload.lang) || 'te'
     });
   }
 
+  /* Fire-and-forget message. Nothing here should ever break because the panel
+     happens to be closed or the worker happens to be asleep. */
+  function send(message) {
+    try {
+      var sending = chrome.runtime.sendMessage(message);
+      if (sending && sending.catch) { sending.catch(function () {}); }
+    } catch (e) { /* nobody listening */ }
+  }
+
+  /* Ask the worker something and wait for the answer. */
+  function ask(message) {
+    return chrome.runtime.sendMessage(message).catch(function () { return null; });
+  }
+
+  function stopEverything() {
+    if (stopWatching) { stopWatching(); stopWatching = null; }
+    if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
+    currentStepPayload = null;
+    clearAll();
+  }
+
+  /* Do one step: find the thing, check it is safe to point at, point at it,
+     then watch for the user to do it. */
+  function runStep(payload) {
+    if (stopWatching) { stopWatching(); stopWatching = null; }
+    if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
+
+    if (!payload || !payload.active) { return; }
+    currentStepPayload = payload;
+
+    var S = DAARI_STRINGS;
+    var lang = payload.lang;
+
+    /* The last step has nothing to point at. It announces, and the caption
+       STAYS -- no auto-clear, because the PNR is the thing the user needs. */
+    if (payload.final) {
+      hideRing();
+      announce('✅ ' + payload.say, DAARI_T(S.ui.finished, lang), 'done', lang);
+      return;
+    }
+
+    var list = serializePage();
+    var index = resolveByName(list, payload.look_for);
+
+    if (index === -1) {
+      /* The failure voice from CLAUDE.md, never a confident wrong pointer.
+         The element may simply not have rendered yet, so keep watching for it
+         rather than giving up on a slow page. */
+      hideRing();
+      announce(DAARI_T(S.ui.notSure, lang), payload.stepLabel, 'lost', lang);
+      waitForElement(payload);
+      return;
+    }
+
+    var name = list[index].name;
+
+    /* THE CONFIRM GATE.
+
+       Checked here, against the real accessible name of the element we are
+       about to ring, every time -- not against a flag in the flow that
+       somebody might forget to set. See safety.js. */
+    if (DAARI_NEEDS_CONFIRM(name) && !payload.confirmed) {
+      hideRing();
+      announce(DAARI_T(S.ui.confirmBeforePay, lang),
+               DAARI_T(S.ui.checkFirst, lang), 'lost', lang);
+      send({ type: 'DAARI_NEEDS_CONFIRM' });
+      return;   /* no ring until the user says they have looked */
+    }
+
+    highlight(index);
+    announce(payload.say, payload.stepLabel, '', lang);
+
+    stopWatching = watchForDone(payload.done_when, index, function () {
+      ask({ type: 'DAARI_STEP_DONE', url: location.href }).then(function (next) {
+        if (next && next.active) { runStep(next); }
+      });
+    });
+  }
+
+  /* The element we need is not here yet. Watch the page and try again when
+     something changes. Cleared when the step changes or guidance stops. */
+  function waitForElement(payload) {
+    var pending = false;
+    retryObserver = new MutationObserver(function () {
+      if (pending) { return; }
+      pending = true;
+      window.setTimeout(function () {
+        pending = false;
+        if (currentStepPayload !== payload) { return; }
+        var list = serializePage();
+        if (resolveByName(list, payload.look_for) !== -1) {
+          runStep(payload);
+        }
+      }, 250);
+    });
+    retryObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   /* =================================================================
-     Messages from the popup
+     Starting up on every page load
+
+     This is what makes a flow survive navigation: the page does not remember
+     anything, it just asks. The worker knows whether there is a session, and
+     works out whether the navigation itself completed the last step.
+     ================================================================= */
+
+  function reportIn() {
+    ask({ type: 'DAARI_PAGE_READY', url: location.href }).then(function (payload) {
+      if (payload && payload.active) { runStep(payload); }
+    });
+  }
+
+  reportIn();
+
+  /* Single-page sites change the URL without reloading, so no new content
+     script is created. Route those through exactly the same path, so there is
+     only one way a step can advance on a URL change. */
+  window.addEventListener('popstate', reportIn);
+  window.addEventListener('hashchange', reportIn);
+
+  /* =================================================================
+     Messages in
      ================================================================= */
 
   chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     if (!message || !message.type) { return; }
 
-    if (message.type === 'DAARI_START_DEMO') {
-      stopDemo();
-      runDemoStep(0);
-      sendResponse({ ok: true, steps: DEMO_STEPS.length });
+    /* The worker telling us what to do -- at the start of a flow, and again
+       after the user has confirmed a dangerous step. */
+    if (message.type === 'DAARI_RUN_STEP') {
+      runStep(message.step);
+      sendResponse({ ok: true });
       return;
     }
 
-    if (message.type === 'DAARI_STOP') {
-      stopDemo();
+    if (message.type === 'DAARI_CLEAR') {
+      stopEverything();
       sendResponse({ ok: true });
       return;
     }
@@ -619,6 +769,7 @@
   /* Handy while developing: window.daari.serializePage() in the page console. */
   window.daari = {
     serializePage: serializePage,
+    resolveByName: resolveByName,
     highlight: highlight,
     showCaption: showCaption,
     clearAll: clearAll

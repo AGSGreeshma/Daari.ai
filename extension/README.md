@@ -5,6 +5,9 @@ The Chrome extension itself (Manifest V3, plain JavaScript, no build step).
 | File | What it is |
 |---|---|
 | `manifest.json` | permissions and entry points |
+| `background.js` | **the brain.** The session, the step machine, the advance/confirm/stop logic |
+| `flows.js` | the hardcoded route through the practice site: what to look for, how to know it's done |
+| `safety.js` | the confirm-gate word list, in one place |
 | `config.js` | which API URL to talk to. The only file you edit when you redeploy |
 | `strings.js` | every word Daari says or shows, in Telugu, Hindi and English |
 | `sidepanel.html` / `.css` / `.js` | **Daari's face, ears and mouth.** Language picker, microphone, live transcript, Repeat and Stop |
@@ -12,9 +15,28 @@ The Chrome extension itself (Manifest V3, plain JavaScript, no build step).
 | `popup.html` / `popup.js` | the small window behind the toolbar icon. Opens the panel, plus two developer tools |
 | `content/` | code that runs *inside* the page being guided (see its own README) |
 
-Phase 4 adds `background.js` — the brain, holding the goal, the step index and
-the history in `chrome.storage.session`. Nothing here ever contains the OpenAI
-key; only `api/` may touch it.
+Nothing here ever contains the OpenAI key; only `api/` may touch it.
+
+## How a flow survives a page load
+
+The session lives in `chrome.storage.session` and is **read at the start of
+every message and written back at the end** — there is no in-memory copy. Chrome
+can stop the worker between any two messages, and with nothing cached there is
+nothing to lose.
+
+The page remembers nothing. On every load it asks *"is there a session, and
+what should I do?"* — which is what makes a flow survive navigation.
+
+**The `url_changed` rule is settled in the worker, never in the page.** A page
+that is navigating away is being destroyed, and a message sent from it may never
+arrive. Instead the worker records which URL a step started on; when the next
+page reports in with a different URL, the step advances. Nothing races, and
+reloading the same page provably doesn't skip a step.
+
+**Steps target elements by name, never by index.** An index belongs to one page
+at one moment; "Send OTP" belongs to the thing itself. Matching is scored —
+exact, then prefix, then whole word, then substring — because plain substring
+matching picks "Tourism Packages" out of the menu when it's looking for "Age".
 
 ## Why the side panel, and not a popup or an offscreen document
 

@@ -35,9 +35,13 @@
 
   <hr>
 
-  <p class="label">Guidance</p>
+  <p class="label">Guidance <span class="counter" id="counter"></span></p>
 
   <div class="instruction" id="instruction"></div>
+
+  <!-- The confirm gate. Hidden until Daari refuses to point at something
+       until the user has looked at the screen. -->
+  <button class="confirm" id="confirm">I have checked - continue</button>
 
   <div class="controls">
     <button id="repeat">&#128257; Repeat</button>
@@ -45,6 +49,7 @@
   </div>
 
   <button class="start" id="startDemo">Start demo on this page</button>
+  <button class="stop" id="stopGuidance">Stop guidance</button>
 
   <p class="voice-status" id="voiceStatus">Checking which voices Windows has...</p>
 

@@ -16,8 +16,8 @@
 (function () {
   'use strict';
 
-  var T = window.DAARI_T;
-  var S = window.DAARI_STRINGS;
+  var T = DAARI_T;
+  var S = DAARI_STRINGS;
 
   /* Telugu is the default, because Daari is for Telugu speakers first.
      Defaulting to English would quietly re-centre the product on English. */
@@ -39,11 +39,18 @@
     useTyped: document.getElementById('useTyped'),
     message: document.getElementById('message'),
     instruction: document.getElementById('instruction'),
+    counter: document.getElementById('counter'),
+    confirm: document.getElementById('confirm'),
     repeat: document.getElementById('repeat'),
     stopSpeak: document.getElementById('stopSpeak'),
     startDemo: document.getElementById('startDemo'),
+    stopGuidance: document.getElementById('stopGuidance'),
     voiceStatus: document.getElementById('voiceStatus')
   };
+
+  /* Which flow "Start demo" runs. One hardcoded flow for now; Phase 6 picks
+     a recipe based on the goal the user spoke. */
+  var DEMO_FLOW_ID = 'practice-book-ticket';
 
   /* =================================================================
      Messages to the user
@@ -123,7 +130,38 @@
     el.repeat.textContent = '\u{1F501} ' + T(S.ui.repeat, lang);
     el.stopSpeak.textContent = '⏸ ' + T(S.ui.stopSpeaking, lang);
     el.startDemo.textContent = T(S.ui.startDemo, lang);
+    el.confirm.textContent = T(S.ui.iHaveChecked, lang);
+    el.stopGuidance.textContent = T(S.ui.stopGuidance, lang);
     document.documentElement.setAttribute('lang', lang);
+  }
+
+  /* =================================================================
+     Where are we? -- driven entirely by the worker
+
+     The panel keeps no idea of its own about the flow. The worker owns the
+     session and broadcasts after every change, so a panel opened halfway
+     through a booking shows the right step immediately.
+     ================================================================= */
+
+  function applyStatus(status) {
+    if (!status || !status.active) {
+      el.counter.textContent = '';
+      el.confirm.style.display = 'none';
+      el.stopGuidance.style.display = 'none';
+      return;
+    }
+
+    el.counter.textContent = T(S.ui.stepOf, lang, {
+      n: status.number, total: status.total
+    });
+    el.stopGuidance.style.display = 'block';
+    el.confirm.style.display = status.awaitingConfirm ? 'block' : 'none';
+  }
+
+  function refreshStatus() {
+    chrome.runtime.sendMessage({ type: 'DAARI_GET_STATUS' })
+      .then(applyStatus)
+      .catch(function () { /* worker still waking up */ });
   }
 
   /* =================================================================
@@ -365,9 +403,17 @@
   }
 
   chrome.runtime.onMessage.addListener(function (message) {
-    if (!message || message.type !== 'DAARI_SPEAK') { return; }
-    showInstruction(message.text, message.stepLabel);
-    speak(message.text, message.lang || lang);
+    if (!message || !message.type) { return; }
+
+    if (message.type === 'DAARI_SPEAK') {
+      showInstruction(message.text, message.stepLabel);
+      speak(message.text, message.lang || lang);
+      return;
+    }
+
+    if (message.type === 'DAARI_STATUS') {
+      applyStatus(message);
+    }
   });
 
   /* =================================================================
@@ -398,19 +444,47 @@
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
   });
 
+  /* Starting a flow goes to the WORKER, not to the page. The worker creates
+     the session first, then tells the page what to do -- so the session
+     exists before anything can be drawn, and a page reload one second later
+     picks up exactly where it left off. */
   el.startDemo.addEventListener('click', async function () {
     clearMessage();
     try {
       var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       var tab = tabs[0];
       if (!tab) { throw new Error('No page is open.'); }
-      await chrome.tabs.sendMessage(tab.id, { type: 'DAARI_START_DEMO' });
+
+      await chrome.runtime.sendMessage({
+        type: 'DAARI_START_FLOW',
+        flowId: DEMO_FLOW_ID,
+        tabId: tab.id,
+        goal: el.typedGoal.value.trim()
+      });
+      refreshStatus();
     } catch (e) {
       showMessage('bad',
-        'Daari is not running in that page yet.\n\n' +
-        'Reload the page (F5) and try again. A tab that was already open when the extension ' +
-        'was installed or reloaded does not have Daari in it until the page is reloaded.');
+        'Could not start. If the page was already open when the extension was reloaded, ' +
+        'reload the page (F5) and try again.\n\nDetails: ' + e.message);
     }
+  });
+
+  /* The confirm gate. The user is telling Daari they have read the screen --
+     only then will it point at the Pay button. */
+  el.confirm.addEventListener('click', function () {
+    el.confirm.style.display = 'none';
+    chrome.runtime.sendMessage({ type: 'DAARI_CONFIRMED' })
+      .catch(function () { refreshStatus(); });
+  });
+
+  el.stopGuidance.addEventListener('click', function () {
+    chrome.runtime.sendMessage({ type: 'DAARI_STOP_FLOW' })
+      .catch(function () {})
+      .then(function () {
+        el.instruction.style.display = 'none';
+        if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
+        applyStatus(null);
+      });
   });
 
   /* =================================================================
@@ -429,6 +503,9 @@
     lang = saved.lang;
     applyLanguage();
     describeVoices();
+    /* A panel opened halfway through a booking should show the right step at
+       once, so ask the worker rather than assuming nothing is happening. */
+    refreshStatus();
   });
 
   /* If the microphone has not been granted yet, say so before the user
