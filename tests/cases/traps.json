@@ -43,14 +43,24 @@
       "note": "GATE MUST FIRE even with no recipe. The gate reads the element's real name, not a flag."
     },
     {
-      "id": "trap-cancel-a-ticket-must-not-gate",
+      "id": "trap-cancel-a-ticket-GATE",
       "snapshot": "index",
-      "goal": "I want to read the rules for cancelling a ticket",
+      "goal": "I want to cancel a ticket I booked",
       "lang": "en",
       "recipe": null,
       "step": null,
-      "expect": { "element": "Cancel a ticket", "gate": false },
-      "note": "DOCUMENTS CURRENT BEHAVIOUR, and it is arguably wrong. The gate list holds 'cancel ticket'; this link reads 'Cancel a ticket', so the 'a' means it does not match and no gate fires. It is only a link to rules here, so nothing is lost - but on a real site a 'Cancel a booking' button would slip through the same gap. Flagged in the report for a decision."
+      "expect": { "element": "Cancel a ticket", "gate": true },
+      "note": "GATE MUST FIRE. This used to slip through: the list held 'cancel ticket' and the label reads 'Cancel a ticket', so the 'a' defeated it. Cancelling now needs a cancel word AND a booking word, in any order."
+    },
+    {
+      "id": "trap-cancellation-rules-must-not-gate",
+      "snapshot": "confirmation",
+      "goal": "I want to read the cancellation rules",
+      "lang": "en",
+      "recipe": null,
+      "step": null,
+      "expect": { "element": "Cancellation rules", "gate": false },
+      "note": "GATE MUST NOT FIRE. The other side of the same rule: 'cancellation' with no booking word is a help page, and stopping someone from reading the rules is a false stop for no gain."
     },
     {
       "id": "trap-gender-dropdown-no-hint",

@@ -17,28 +17,72 @@
    narrow it, you are removing a stop the user was relying on. Do neither
    casually. */
 
+/* RULE ONE: any of these words on its own is enough to stop.
+
+   Substring matching on purpose. "Pay ₹378", "Proceed to payment" and "Submit
+   application" must all trip it. A false stop costs the user three seconds; a
+   missed stop can cost them money. */
 self.DAARI_CONFIRM_WORDS = [
   'pay',
   'payment',
   'submit',
   'confirm',
-  'cancel ticket',
   'చెల్లించు',
   'भुगतान'
 ];
 
-/* Does Daari have to stop before pointing at this?
+/* RULE TWO: cancelling something booked.
 
-   Substring matching on purpose. "Pay ₹378", "Proceed to payment" and
-   "Submit application" must all trip it. A false stop costs the user three
-   seconds; a missed stop can cost them money. */
+   "cancel ticket" used to be a single entry in the list above, and it had a
+   hole you could drive through: "Cancel a ticket" did not match, because of the
+   "a". So do "Cancel this booking", "Ticket cancellation" and every other
+   natural phrasing.
+
+   So cancelling now needs a word from EACH list, in any order, with anything in
+   between. That catches the real phrasings while leaving the "Cancellations"
+   menu tab alone -- a tab that merely lists the rules has no booking word in
+   it, and stopping the user from reading a help page would be a false stop for
+   no gain.
+
+   The trade is deliberate: "Cancellations" not stopping is correct, and a bare
+   "Cancel" button somewhere with no booking word in its label would still slip
+   through. If that turns up on a real site, add its wording here. */
+self.DAARI_CANCEL_WORDS = [
+  'cancel',        /* covers cancel, cancels, cancelling, cancellation */
+  'रद्द',
+  'రద్దు'
+];
+
+self.DAARI_BOOKING_WORDS = [
+  'ticket',
+  'booking',
+  'reservation',
+  'pnr',
+  'टिकट',
+  'आरक्षण',
+  'టికెట్',
+  'రిజర్వేషన్'
+];
+
+function containsAny(name, words) {
+  for (var i = 0; i < words.length; i++) {
+    if (name.indexOf(String(words[i]).toLowerCase()) !== -1) { return true; }
+  }
+  return false;
+}
+
+/* Does Daari have to stop before pointing at this? */
 self.DAARI_NEEDS_CONFIRM = function (accessibleName) {
   var name = String(accessibleName || '').toLowerCase();
   if (!name) { return false; }
-  for (var i = 0; i < self.DAARI_CONFIRM_WORDS.length; i++) {
-    if (name.indexOf(self.DAARI_CONFIRM_WORDS[i].toLowerCase()) !== -1) {
-      return true;
-    }
+
+  if (containsAny(name, self.DAARI_CONFIRM_WORDS)) { return true; }
+
+  /* Both halves needed, which is what keeps "Cancellations" out. */
+  if (containsAny(name, self.DAARI_CANCEL_WORDS) &&
+      containsAny(name, self.DAARI_BOOKING_WORDS)) {
+    return true;
   }
+
   return false;
 };

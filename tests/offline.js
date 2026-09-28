@@ -159,6 +159,57 @@ console.log('\n2. A spoken goal picks the right recipe');
   }
 }
 
+console.log('\n2b. The confirm gate word rules');
+{
+  const NC = ctx.self.DAARI_NEEDS_CONFIRM;
+
+  // RULE ONE: one word is enough.
+  [
+    'Pay ₹378', 'Pay now', 'Proceed to payment', 'Continue to Payment',
+    'Submit application', 'Confirm booking', 'Booking Confirmed',
+    'చెల్లించు',              // Telugu: pay
+    'भुगतान करें'         // Hindi: make payment
+  ].forEach((name) => check('gates on one word: "' + name + '"', NC(name), true));
+
+  // RULE TWO: cancelling needs a cancel word AND a booking word, any order,
+  // anything in between. This is the gap that was fixed: the list used to hold
+  // the single phrase "cancel ticket", and "Cancel a ticket" defeated it.
+  [
+    'Cancel ticket',
+    'Cancel a ticket',                 // the phrasing that used to slip through
+    'Cancel this booking',
+    'Cancel my reservation',
+    'Ticket cancellation',             // reversed order
+    'Cancellation of booking',
+    'Cancel the ticket now please',    // words in between
+    'Cancel PNR',
+    'टिकट रद्द करें',   // Hindi: cancel ticket
+    'रद्द टिकट',                            // Hindi, reversed
+    'టికెట్ రద్దు'           // Telugu: ticket cancel
+  ].forEach((name) => check('gates on cancel+booking: "' + name + '"', NC(name), true));
+
+  // A cancel word with NO booking word is a help page or a menu tab. Stopping
+  // someone from reading the rules is a false stop for no gain.
+  [
+    'Cancellations',                   // the menu tab - the case that drove this
+    'Cancellation rules',
+    'Cancellation policy',
+    'Refund and cancellation charges'
+  ].forEach((name) => check('does NOT gate: "' + name + '"', NC(name), false));
+
+  // A booking word with no cancel word is not enough either.
+  ['Book Ticket', 'Book', 'PNR Status', 'Ticket history']
+    .forEach((name) => check('does NOT gate: "' + name + '"', NC(name), false));
+
+  // Ordinary controls stay ungated.
+  ['From station *', 'Send OTP', 'Card number *', 'Age *', 'Search Trains', '']
+    .forEach((name) => check('does NOT gate: "' + (name || '(empty)') + '"', NC(name), false));
+
+  // A known, deliberate gap, recorded so it is a decision and not an accident:
+  // a bare "Cancel" with nothing else in its label gets through.
+  check('KNOWN GAP: a bare "Cancel" does not gate', NC('Cancel'), false);
+}
+
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
