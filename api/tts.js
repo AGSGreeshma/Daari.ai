@@ -11,7 +11,16 @@
 // repeated step or a press of Repeat costs nothing. Speech is charged by
 // character, and Daari says the same dozen sentences over and over.
 
-const MAX_TEXT = 300;
+const guard = require('./_guard.js');
+
+/* Speech is charged by the character, so this is the main cost lever here.
+   Daari's sentences are one instruction long; 220 is generous for that. */
+const MAX_TEXT = 220;
+
+const MAX_BODY_BYTES = 4 * 1024;
+/* Lower than the step endpoint: the extension caches by sentence, so a real
+   session fetches a dozen distinct phrases, not hundreds. */
+const MAX_PER_WINDOW = 40;
 
 // Overridable, so the cheapest available voice model can be chosen without a
 // code change.
@@ -21,13 +30,36 @@ const TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const TIMEOUT_MS = 8000;
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  guard.setCors(res);
 
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Use POST.' });
+    return;
+  }
+
+  // Turned away before a single character is billed.
+  const blocked = guard.check(req, {
+    maxBytes: MAX_BODY_BYTES,
+    maxPerWindow: MAX_PER_WINDOW
+  });
+  if (blocked) {
+    res.status(blocked.status).json({ error: blocked.error });
+    return;
+  }
+
+  // Validate the REQUEST before complaining about the SERVER. A malformed
+  // request is a 400 whether or not a key happens to be configured, and
+  // checking it first means a bad request can never reach anything billable.
+  const body = req.body || {};
+  const text = String(body.text || '').trim();
+
+  if (!text) {
+    res.status(400).json({ error: 'text is required.' });
+    return;
+  }
+  if (text.length > MAX_TEXT) {
+    res.status(400).json({ error: 'text must be at most ' + MAX_TEXT + ' characters.' });
     return;
   }
 
@@ -38,18 +70,6 @@ module.exports = async (req, res) => {
       error: 'This server has no OPENAI_API_KEY set. Daari will fall back to ' +
              'captions and a chime.'
     });
-    return;
-  }
-
-  const body = req.body || {};
-  const text = String(body.text || '').trim();
-
-  if (!text) {
-    res.status(400).json({ error: 'text is required.' });
-    return;
-  }
-  if (text.length > MAX_TEXT) {
-    res.status(400).json({ error: 'text must be at most ' + MAX_TEXT + ' characters.' });
     return;
   }
 

@@ -12,11 +12,22 @@
 // an unexpected field turns up, so a bug in the extension cannot leak a value
 // through a server that was willing to forward it.
 
+const guard = require('./_guard.js');
+
 const ALLOWED_ELEMENT_FIELDS = ['i', 'tag', 'type', 'name', 'filled'];
 const MAX_ELEMENTS = 60;
 const MAX_NAME = 120;
 const MAX_GOAL = 300;
 const MAX_HISTORY = 8;
+
+// Abuse guards. The extension caps itself at 25 calls a session, but that cap
+// lives in the extension and this URL is open to the internet.
+const MAX_BODY_BYTES = 24 * 1024;   // 60 elements of labels is a few KB
+const MAX_PER_WINDOW = 60;          // per IP per 5 minutes -- a session needs 25
+
+// Refuse an oversized list rather than quietly trimming it: a caller sending
+// 500 elements is not Daari, and silently serving them teaches nobody anything.
+const REFUSE_ABOVE_ELEMENTS = 80;
 
 // The vocabulary the page can actually evaluate. Anything else is meaningless
 // to Daari, so the model is held to this list.
@@ -31,12 +42,6 @@ const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 // Answer before the extension's own 6s patience runs out, so it gets a real
 // reply rather than a hang.
 const UPSTREAM_TIMEOUT_MS = 5000;
-
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 
 function fail(res, status, message) {
   res.status(status).json({ error: message });
@@ -167,7 +172,9 @@ async function askOpenAI(apiKey, userPrompt, useSchema) {
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.2,
-    max_tokens: 250,
+    /* One short sentence plus four small fields. 150 is comfortable for that
+       and puts a hard ceiling on what any single call can cost. */
+    max_tokens: 150,
     response_format: useSchema
       ? { type: 'json_schema', json_schema: RESPONSE_SCHEMA }
       : { type: 'json_object' }
@@ -193,20 +200,22 @@ async function askOpenAI(apiKey, userPrompt, useSchema) {
 // ---------------------------------------------------------------- the handler
 
 module.exports = async (req, res) => {
-  setCors(res);
+  guard.setCors(res);
 
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
   if (req.method !== 'POST') { return fail(res, 405, 'Use POST.'); }
 
-  // The key is read here and nowhere else. It is never logged, never returned,
-  // and never put into an error message.
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return fail(res, 500,
-      'This server has no OPENAI_API_KEY set. Add it in the Vercel project ' +
-      'settings, or in a local .env for vercel dev, then redeploy.');
-  }
+  // Turned away before a single token is spent: wrong client, oversized body,
+  // or too many requests from one address.
+  const blocked = guard.check(req, {
+    maxBytes: MAX_BODY_BYTES,
+    maxPerWindow: MAX_PER_WINDOW
+  });
+  if (blocked) { return fail(res, blocked.status, blocked.error); }
 
+  // Validate the REQUEST before complaining about the SERVER. A malformed
+  // request is a 400 whether or not a key happens to be configured, and
+  // checking it first means a bad request can never reach anything billable.
   const body = req.body || {};
 
   if (typeof body.goal !== 'string' || body.goal.length > MAX_GOAL) {
@@ -217,6 +226,11 @@ module.exports = async (req, res) => {
   }
   if (!Array.isArray(body.elements) || body.elements.length === 0) {
     return fail(res, 400, 'elements must be a non-empty array.');
+  }
+  if (body.elements.length > REFUSE_ABOVE_ELEMENTS) {
+    return fail(res, 400,
+      'elements must be at most ' + REFUSE_ABOVE_ELEMENTS + ' long. Daari sends ' +
+      MAX_ELEMENTS + ' at most.');
   }
 
   const checked = cleanElements(body.elements);
@@ -231,6 +245,15 @@ module.exports = async (req, res) => {
   }
   if (!checked.cleaned.length) {
     return fail(res, 400, 'No usable elements after validation.');
+  }
+
+  // The key is read here and nowhere else. It is never logged, never returned,
+  // and never put into an error message.
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return fail(res, 500,
+      'This server has no OPENAI_API_KEY set. Add it in the Vercel project ' +
+      'settings, or in a local .env for vercel dev, then redeploy.');
   }
 
   const prompt = buildUserPrompt({

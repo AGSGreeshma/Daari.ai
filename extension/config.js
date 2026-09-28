@@ -10,5 +10,13 @@
 // extension, so anyone who installs Daari can read it.
 
 self.DAARI_CONFIG = {
-  API_BASE: "https://daari-ai.vercel.app"  // <-- EDIT THIS ONE LINE
+  API_BASE: "https://daari-ai.vercel.app",  // <-- EDIT THIS ONE LINE
+
+  // Sent as the X-Daari-Client header. The API turns away anything without it.
+  //
+  // This is NOT a secret and is not pretending to be one -- it ships inside the
+  // extension where anyone can read it. It is a locked screen door: it stops a
+  // crawler or a copied URL from spending the budget. The thing that actually
+  // protects the money is the hard spending limit in the OpenAI dashboard.
+  CLIENT: "daari/0.5"
 };

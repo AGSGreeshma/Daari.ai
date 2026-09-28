@@ -183,7 +183,11 @@ async function callAi(session, page, recipeStep, lang) {
   try {
     var response = await fetch(base + '/api/step', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        /* The API refuses requests without this. See config.js. */
+        'X-Daari-Client': self.DAARI_CONFIG.CLIENT
+      },
       body: JSON.stringify({
         goal: session.goal || '',
         lang: lang,

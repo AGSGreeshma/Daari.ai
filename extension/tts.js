@@ -46,7 +46,11 @@ self.DAARI_TTS = (function () {
 
     var response = await fetch(base + '/api/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        /* The API refuses requests without this. See config.js. */
+        'X-Daari-Client': self.DAARI_CONFIG.CLIENT
+      },
       body: JSON.stringify({ text: text, lang: lang })
     });
 
