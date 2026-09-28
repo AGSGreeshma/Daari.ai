@@ -38,6 +38,11 @@ var AI_TIMEOUT_MS = 6000;
    worse for this audience than admitting uncertainty. */
 var MIN_CONFIDENCE = 0.45;
 
+/* Higher bar when there is no recipe to agree with. A recipe-backed answer has a
+   second opinion behind it; an unaccompanied one has only itself, and the first
+   live run showed the model reporting 0.9 whatever it actually knew. */
+var MIN_CONFIDENCE_ALONE = 0.7;
+
 /* =================================================================
    Recipes -- static data, so caching them in the worker is fine.
    Losing the cache when the worker sleeps costs one re-read of two
@@ -295,7 +300,7 @@ async function decideStep(session, page) {
      BEFORE spending a call on it. There is no point paying the model to phrase
      a step we are not going to show yet. */
   if (recipeIndex !== -1 &&
-      gateApplies(elements[recipeIndex], recipeStep) &&
+      gateApplies(elements[recipeIndex], recipeStep, null) &&
       session.confirmedStep !== session.stepIndex) {
     return gatePayload(payload, session, lang);
   }
@@ -323,21 +328,23 @@ async function decideStep(session, page) {
      element. Note what this compares: two indices, computed by the same
      matching code on the same list. Not two strings, fuzzily.
 
-     When there is no recipe, there is nothing to agree with, so the answer is
-     judged on its own.
+     goal_supported is checked FIRST and independently of confidence. The live
+     evaluation found the model returning confidence 0.9 on 30 of 31 answers --
+     a constant, not a judgement -- which left the threshold doing nothing at
+     all. Asked in Hindi to apply for a passport, on the payment page, it
+     confidently pointed at the Pay button. Making the model answer "can this
+     goal be done here at all?" as its own separate field is what gives Daari a
+     way to say "I am not sure" and mean it.
 
-     goalAchievableHere is checked FIRST and independently of confidence. The
-     live evaluation found the model returning confidence 0.9 on 30 of 31
-     answers -- a constant, not a judgement -- which left the threshold below
-     doing nothing at all. Asked in Hindi to apply for a passport, on the
-     payment page, it confidently pointed at the Pay button. Making the model
-     answer "can this page do this at all?" as its own separate field is what
-     gives Daari a way to say "I am not sure" and mean it. */
-  var wrongPage = ai && ai.goalAchievableHere === false;
+     With no recipe there is nothing to agree with, so the bar is higher: 0.7
+     rather than 0.45. A recipe-backed answer has a second opinion behind it; an
+     unaccompanied one has only itself. */
+  var wrongPage = ai && ai.goal_supported === false;
+  var needed = recipeStep ? MIN_CONFIDENCE : MIN_CONFIDENCE_ALONE;
 
   var usable = ai && !wrongPage &&
                ai.elementIndex !== null &&
-               ai.confidence >= MIN_CONFIDENCE &&
+               ai.confidence >= needed &&
                elements[ai.elementIndex];
 
   if (usable && (!recipeStep || ai.elementIndex === recipeIndex)) {
@@ -353,9 +360,9 @@ async function decideStep(session, page) {
     payload.done_when = recipeStep.done_when || 'clicked';
     payload.path = 'fallback';
     payload.why = ai
-      ? (wrongPage ? 'model says this page cannot do it'
+      ? (wrongPage ? 'model says the goal cannot be done here'
           : ai.elementIndex === null ? 'model found nothing'
-          : ai.confidence < MIN_CONFIDENCE ? 'model unsure (' + ai.confidence + ')'
+          : ai.confidence < needed ? 'model unsure (' + ai.confidence + ' < ' + needed + ')'
           : 'model chose a different element')
       : reason;
 
@@ -364,8 +371,13 @@ async function decideStep(session, page) {
     payload.index = -1;
     payload.say = self.DAARI_T(S.ui.notSure, lang);
     payload.path = 'none';
-    payload.why = wrongPage ? 'model says this page cannot do it'
-                : reason || 'no element matched';
+    payload.why = wrongPage ? 'model says the goal cannot be done here'
+                : reason ? reason
+                : !ai ? 'no answer from the model'
+                : ai.elementIndex === null ? 'model found nothing'
+                : ai.confidence < needed
+                    ? 'model unsure (' + ai.confidence + ' < ' + needed + ')'
+                : 'no element matched';
   }
 
   /* ---- the confirm gate, part two ----------------------------------------
@@ -374,7 +386,8 @@ async function decideStep(session, page) {
      we know what it picked. The model's stopAndConfirm is OR-ed in, so it can
      only ever ADD a stop -- never remove the one our own code decided on. */
   if (payload.index !== -1 &&
-      gateApplies(elements[payload.index], recipeStep) &&
+      gateApplies(elements[payload.index], recipeStep,
+                  payload.path === 'ai' ? ai : null) &&
       session.confirmedStep !== session.stepIndex) {
     return gatePayload(payload, session, lang);
   }
@@ -393,28 +406,32 @@ async function decideStep(session, page) {
 
 /* Does Daari have to stop before pointing at this?
 
-   OUR CODE DECIDES. The model's stopAndConfirm is recorded but never acted on.
+   Two independent halves.
 
-   It used to be OR-ed in, on the reasoning that the model could only ever ADD a
-   stop and so could only make things safer. The live evaluation showed why that
-   was wrong: the model asked for a stop on "From station", "To station",
-   "Class" and "PNR number" -- 9 false stops in 31 cases. A user would have had
-   to press "I have checked" on nearly every step, which does not make anything
-   safer, it just teaches them to press it without looking. A stop that fires
-   constantly is a stop nobody reads.
+   OUR CODE, always: an actionable control whose name trips the word list in
+   safety.js, or a recipe step marked confirm. Actionable matters -- a link or
+   tab called "Cancellations" navigates to a page about cancelling and does not
+   cancel anything, so stopping the user from reading it is a false stop.
 
-   It also quietly broke CLAUDE.md rule 3. "Safety is enforced in code, never
-   delegated to the model" has to mean both directions: the model may not remove
-   a stop, and it may not invent one either.
+   THE MODEL, only when its answer was accepted. Its stopAndConfirm can ADD a
+   stop to an element it chose itself, which is the "can only add, never remove"
+   rule. But when the validation gate has DISCARDED its answer, its opinion goes
+   with it: we are no longer pointing where it said, so its judgement is about a
+   different element than the one on screen.
 
-   The trade, stated plainly: a dangerous button whose label contains no risky
-   word will not be caught. In the evaluation our own list caught 3 out of 3
-   anyway -- the model never contributed a stop that mattered. If a real site
-   turns up such a button, its wording goes in safety.js where it can be tested. */
-function gateApplies(element, recipeStep) {
+   That distinction is what fixed the 9 false stops out of 31 in the first live
+   run, where the model asked to stop on "From station", "To station", "Class"
+   and "PNR number". A stop that fires on every step is a stop nobody reads. */
+function gateApplies(element, recipeStep, acceptedAi) {
   if (!element) { return false; }
-  return self.DAARI_NEEDS_CONFIRM(element.name) ||
-         !!(recipeStep && recipeStep.confirm === true);
+
+  if (self.DAARI_IS_ACTIONABLE(element) && self.DAARI_NEEDS_CONFIRM(element.name)) {
+    return true;
+  }
+  if (recipeStep && recipeStep.confirm === true) { return true; }
+  if (acceptedAi && acceptedAi.stopAndConfirm === true) { return true; }
+
+  return false;
 }
 
 /* A gated step carries NO element index, so the page cannot ring the button

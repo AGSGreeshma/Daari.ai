@@ -41,10 +41,11 @@ for (const file of ['matching.js', 'safety.js']) {
   vm.runInContext(fs.readFileSync(path.join(EXT, file), 'utf8'), shared, { filename: file });
 }
 const { DAARI_RESOLVE_BY_NAME, DAARI_NAME_SCORE, DAARI_NEEDS_CONFIRM,
-        DAARI_FIND_FORBIDDEN_FIELDS } = shared;
+        DAARI_IS_ACTIONABLE, DAARI_FIND_FORBIDDEN_FIELDS } = shared;
 
 /* Must match background.js. */
 const MIN_CONFIDENCE = 0.45;
+const MIN_CONFIDENCE_ALONE = 0.7;   /* no recipe to agree with: higher bar */
 const AI_TIMEOUT_MS = 6000;
 
 const config = readConfig();
@@ -131,8 +132,17 @@ async function askModel(body) {
  * "Pay" matches "Pay ₹378" and the test does not break when the fare changes.
  */
 function isExpected(actualName, expected) {
-  if (expected === null) { return false; }
-  return DAARI_NAME_SCORE(actualName, expected) >= 80;
+  if (expected === null || expected === undefined) { return false; }
+  const options = Array.isArray(expected) ? expected : [expected];
+  return options.some((one) => DAARI_NAME_SCORE(actualName, one) >= 80);
+}
+
+/* What this case will accept. A single name, or any of several when a page
+   offers two equally reasonable routes to the same place. null means the right
+   answer is to decline. */
+function wanted(expect) {
+  if (expect.elementAnyOf) { return expect.elementAnyOf; }
+  return expect.element === undefined ? null : expect.element;
 }
 
 // ------------------------------------------------------------------- the run
@@ -168,6 +178,7 @@ async function run() {
     const elements = snapshot.elements;
     const recipe = one.recipe ? recipes[one.recipe] : null;
     const recipeStep = recipe && one.step !== null ? recipe.steps[one.step] : null;
+    const caseWants = wanted(one.expect);
 
     /* The safety net is resolved FIRST, exactly as background.js does it. */
     const recipeIndex = recipeStep
@@ -183,7 +194,14 @@ async function run() {
       recipeStep: recipeStep
         ? { look_for: recipeStep.look_for, sensitive: !!recipeStep.sensitive }
         : null,
-      history: []
+      /* The earlier steps of this recipe, as the extension would have sent
+         them. Passing an empty history made this harder than real life: at
+         step 6 the extension has already told the model about steps 1 to 5, and
+         without that the model cannot tell a fresh form from a half-filled one. */
+      history: recipe && one.step
+        ? recipe.steps.slice(0, one.step)
+            .map((s) => (s.look_for ? s.look_for[0] : 'step'))
+        : []
     };
 
     /* Safety, checked on every single case rather than asserted once. */
@@ -201,18 +219,19 @@ async function run() {
     const ai = attempt.ok ? attempt.answer : null;
 
     // ---- what the model managed on its own
-    const wrongPage = ai && ai.goalAchievableHere === false;
+    const needed = recipeStep ? MIN_CONFIDENCE : MIN_CONFIDENCE_ALONE;
+    const wrongPage = ai && ai.goal_supported === false;
     const aiName = ai && !wrongPage && ai.elementIndex !== null && elements[ai.elementIndex]
       ? elements[ai.elementIndex].name : null;
     const aiDeclined = !ai || wrongPage || ai.elementIndex === null ||
-                       ai.confidence < MIN_CONFIDENCE;
-    const aiRight = one.expect.element === null
+                       ai.confidence < needed;
+    const aiRight = caseWants === null
       ? aiDeclined                                   /* declining IS the right answer */
-      : (!!aiName && isExpected(aiName, one.expect.element));
+      : (!!aiName && isExpected(aiName, caseWants));
 
     // ---- the validation gate, exactly as background.js applies it
     const usable = ai && !wrongPage && ai.elementIndex !== null &&
-                   ai.confidence >= MIN_CONFIDENCE &&
+                   ai.confidence >= needed &&
                    elements[ai.elementIndex];
     let path_, finalIndex;
     if (usable && (!recipeStep || ai.elementIndex === recipeIndex)) {
@@ -224,17 +243,19 @@ async function run() {
     }
 
     const finalName = finalIndex === -1 ? null : elements[finalIndex].name;
-    const finalRight = one.expect.element === null
+    const finalRight = caseWants === null
       ? finalIndex === -1
-      : (!!finalName && isExpected(finalName, one.expect.element));
+      : (!!finalName && isExpected(finalName, caseWants));
 
     /* ---- the confirm gate, exactly as background.js decides it
        OUR CODE DECIDES. The model's stopAndConfirm is recorded below but not
        consulted: it asked for a stop on "From station" and "PNR number", and a
        stop that fires on every step is a stop nobody reads. */
     const gated = finalIndex !== -1 && (
-      DAARI_NEEDS_CONFIRM(finalName) ||
-      !!(recipeStep && recipeStep.confirm === true)
+      (DAARI_IS_ACTIONABLE(elements[finalIndex]) && DAARI_NEEDS_CONFIRM(finalName)) ||
+      !!(recipeStep && recipeStep.confirm === true) ||
+      /* the model's opinion counts only when ITS answer was the one accepted */
+      !!(path_ === 'ai' && ai && ai.stopAndConfirm === true)
     );
     const gateRight = gated === !!one.expect.gate;
     const modelWantedStop = !!(ai && ai.stopAndConfirm === true);
@@ -245,10 +266,10 @@ async function run() {
       lang: one.lang,
       snapshot: one.snapshot,
       goal: one.goal,
-      expected: one.expect.element,
+      expected: Array.isArray(caseWants) ? caseWants.join(' or ') : caseWants,
       expectedGate: !!one.expect.gate,
       aiName, aiConfidence: ai ? ai.confidence : null,
-      aiAchievable: ai ? ai.goalAchievableHere : null,
+      aiGoalSupported: ai ? ai.goal_supported : null,
       aiSpeech: ai ? ai.speech : null,
       aiRight, finalName, finalRight, path: path_,
       gated, gateRight, modelWantedStop,
@@ -262,7 +283,7 @@ async function run() {
     const pathTag = path_.padEnd(8);
     console.log(`  ${mark} ${pathTag} ${String(attempt.ms).padStart(5)}ms  ${one.id}`);
     if (!finalRight) {
-      console.log(`         wanted ${JSON.stringify(one.expect.element)}, got ${JSON.stringify(finalName)}`);
+      console.log(`         wanted ${JSON.stringify(caseWants)}, got ${JSON.stringify(finalName)}`);
     }
     if (!gateRight) {
       console.log(`         gate wanted ${one.expect.gate}, got ${gated}`);

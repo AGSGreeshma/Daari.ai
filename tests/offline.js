@@ -210,6 +210,44 @@ console.log('\n2b. The confirm gate word rules');
   check('KNOWN GAP: a bare "Cancel" does not gate', NC('Cancel'), false);
 }
 
+console.log('\n2c. The gate fires only on things that ACT, not on links');
+{
+  const ACT = ctx.self.DAARI_IS_ACTIONABLE;
+  const NC = ctx.self.DAARI_NEEDS_CONFIRM;
+
+  // Actionable: it does something.
+  check('<button> is actionable', ACT({ tag: 'button', type: 'submit' }), true);
+  check('<button type=button> is actionable', ACT({ tag: 'button', type: 'button' }), true);
+  check('<input type=submit> is actionable', ACT({ tag: 'input', type: 'submit' }), true);
+  check('<input type=image> is actionable', ACT({ tag: 'input', type: 'image' }), true);
+  check('a link with role=button is actionable', ACT({ tag: 'a', type: 'button' }), true);
+
+  // Not actionable: it goes somewhere, or it holds text.
+  check('a plain link is not', ACT({ tag: 'a', type: '' }), false);
+  check('a tab is not', ACT({ tag: 'a', type: 'tab' }), false);
+  check('a text box is not', ACT({ tag: 'input', type: 'text' }), false);
+  check('a dropdown is not', ACT({ tag: 'select', type: '' }), false);
+  check('nothing at all is not', ACT(null), false);
+
+  /* THE CASE THAT DROVE THIS. A link called "Cancellations" navigates to a page
+     about cancelling; it cancels nothing. A BUTTON called "Cancel booking"
+     cancels a booking. Same words, opposite consequences. No snapshot of the
+     practice site has such a button, so it is constructed here where it can be
+     exact. */
+  const link = { tag: 'a', type: '', name: 'Cancel a ticket' };
+  const button = { tag: 'button', type: 'button', name: 'Cancel booking' };
+
+  check('LINK "Cancel a ticket": words match but it does NOT gate',
+    ACT(link) && NC(link.name), false);
+  check('  (the words alone would have matched)', NC(link.name), true);
+  check('BUTTON "Cancel booking": GATES', ACT(button) && NC(button.name), true);
+
+  const payButton = { tag: 'button', type: 'submit', name: 'Pay ₹378' };
+  const payLink = { tag: 'a', type: '', name: 'Payment options' };
+  check('BUTTON "Pay ₹378": GATES', ACT(payButton) && NC(payButton.name), true);
+  check('LINK "Payment options": does not gate', ACT(payLink) && NC(payLink.name), false);
+}
+
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
@@ -253,7 +291,7 @@ console.log('\n4. THE VALIDATION GATE');
   s = await decideWith({ elementIndex: 4, speech: 'Type here', done_when: 'field_filled',
                          stopAndConfirm: false, confidence: 0.2 }, null);
   check('low confidence -> fallback', s.path, 'fallback');
-  check('  reason names the confidence', s.why, 'model unsure (0.2)');
+  check('  reason names the confidence and the bar', s.why, 'model unsure (0.2 < 0.45)');
 
   // No element chosen -> recipe wins.
   s = await decideWith({ elementIndex: null, speech: 'I cannot tell', done_when: 'clicked',
@@ -363,34 +401,93 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   check('  gate cleared', s.gate, false);
   check('  and the page is told it was confirmed, for its own check', s.confirmed, true);
 
-  /* The model's stopAndConfirm is ADVISORY. It used to be OR-ed in, and the
-     live evaluation showed the model asking for stops on "From station",
-     "To station", "Class" and "PNR number" -- 9 false stops in 31 cases. A stop
-     that fires on every step is a stop nobody reads, and inventing stops is as
-     much "delegating safety to the model" as removing them. */
+  /* The model's stopAndConfirm depends on whether ITS answer was accepted.
+
+     ACCEPTED: it may add a stop to the element it chose. That is the "can only
+     add, never remove" rule.
+
+     DISCARDED: its opinion goes with its answer. We are no longer pointing where
+     it said, so its judgement is about a different element than the one on
+     screen. This is what fixed 8 of the 9 false stops in the first live run,
+     where it asked to stop on "From station", "To station", "Class" and
+     "PNR number" while the recipe was overruling it. */
+
+  // ACCEPTED answer, with no recipe to disagree with -> its stop counts.
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
-  const HARMLESS = [{ i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false }];
-  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Type here',
+  const ORDINARY = [{ i: 0, tag: 'input', type: 'text', name: 'Some box', filled: false }];
+  aiReply = { goal_supported: true, elementIndex: 0, speech: 'Type here',
               done_when: 'field_filled', stopAndConfirm: true, confidence: 0.9 };
   await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
-    page('https://somewhere.else/x', HARMLESS)));
-  check('model asking for a stop on an ordinary field is IGNORED', s.gate, false);
-  check('  but it is recorded, so the ask is visible', s.modelWantedStop, true);
-  check('  and the step still runs', s.index, 0);
+    page('https://somewhere.else/x', ORDINARY)));
+  check('an ACCEPTED answer may add a stop', [s.path, s.gate], ['gate', true]);
 
-  // Our own list still decides, with no help from the model.
+  /* DISCARDED answer -> its stop is dropped with it. The recipe wants "from
+     station" at index 0; the model picks index 1 and asks for a stop. The
+     element we actually point at is the recipe's, so the model's opinion about
+     a different element does not travel with it. */
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiReply = { goal_supported: true, elementIndex: 7, speech: 'Press Search',
+              done_when: 'clicked', stopAndConfirm: true, confidence: 0.9 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+  check('a DISCARDED answer loses its stop too', [s.path, s.gate], ['fallback', false]);
+  check('  it is still recorded, so the ask is visible', s.modelWantedStop, true);
+  check('  and the recipe step runs normally', s.index, 4);
+
+  // Our own list decides regardless of what the model says.
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   const DANGEROUS = [{ i: 0, tag: 'button', type: 'submit', name: 'Pay ₹500', filled: false }];
-  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Press it',
+  aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press it',
               done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
   await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', DANGEROUS)));
   check('our word list still stops, even when the model says not to', s.gate, true);
+
+  /* And the gate no longer fires on a LINK, however alarming its label. */
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  const SCARY_LINK = [{ i: 0, tag: 'a', type: '', name: 'Cancel this booking', filled: false }];
+  aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press it',
+              done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://somewhere.else/x', SCARY_LINK)));
+  check('a LINK saying "Cancel this booking" does not gate', s.gate, false);
+
+  // The same words on a BUTTON do.
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  const SCARY_BUTTON = [{ i: 0, tag: 'button', type: 'button', name: 'Cancel this booking', filled: false }];
+  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://somewhere.else/x', SCARY_BUTTON)));
+  check('a BUTTON saying "Cancel this booking" GATES', s.gate, true);
 }
 
-console.log('\n7b. goalAchievableHere: saying "I am not sure" and meaning it');
+console.log('\n7c. No recipe means a higher bar for confidence');
+{
+  const PLAIN = [{ i: 0, tag: 'button', type: 'button', name: 'Continue', filled: false }];
+
+  // 0.5 clears the recipe-backed bar of 0.45 but not the alone bar of 0.7.
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiFail = null;
+  aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press Continue',
+              done_when: 'clicked', stopAndConfirm: false, confidence: 0.5 };
+  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  let s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://somewhere.else/x', PLAIN)));
+  check('0.5 with no recipe is not believed', s.path, 'none');
+  check('  and the bar is named in the reason', s.why, 'model unsure (0.5 < 0.7)');
+
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiReply.confidence = 0.75;
+  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    page('https://somewhere.else/x', PLAIN)));
+  check('0.75 with no recipe is believed', s.path, 'ai');
+}
+
+console.log('\n7b. goal_supported: saying "I am not sure" and meaning it');
 {
   const PAYMENT = [
     { i: 0, tag: 'input', type: 'text', name: 'Card number *', filled: false },
@@ -403,27 +500,27 @@ console.log('\n7b. goalAchievableHere: saying "I am not sure" and meaning it');
      a constant, not a judgement. */
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiFail = null;
-  aiReply = { goalAchievableHere: false, elementIndex: 1, speech: 'Press Pay',
+  aiReply = { goal_supported: false, elementIndex: 1, speech: 'Press Pay',
               done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
   await call({ type: 'DAARI_START_FLOW', goal: 'apply for a passport', tabId: 1 });
   let s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://x.dev/payment.html', PAYMENT)));
-  check('a false goalAchievableHere overrides a confident element choice', s.path, 'none');
+  check('a false goal_supported overrides a confident element choice', s.path, 'none');
   check('  points at nothing', s.index, -1);
   check('  and says so', s.say, ctx.self.DAARI_STRINGS.ui.notSure.en);
-  check('  with the reason recorded', s.why, 'model says this page cannot do it');
+  check('  with the reason recorded', s.why, 'model says the goal cannot be done here');
 
   /* And it must not block a legitimate answer. The goal deliberately contains
      no recipe match_phrase, so this really is the model working alone -- a goal
      mentioning "ticket" would match the booking recipe and be judged against
      its first step instead. */
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
-  aiReply = { goalAchievableHere: true, elementIndex: 0, speech: 'Type your card number here',
+  aiReply = { goal_supported: true, elementIndex: 0, speech: 'Type your card number here',
               done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
   await call({ type: 'DAARI_START_FLOW', goal: 'complete this form', tabId: 1 });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://x.dev/payment.html', PAYMENT)));
-  check('a true goalAchievableHere lets the answer through', s.path, 'ai');
+  check('a true goal_supported lets the answer through', s.path, 'ai');
   check('  pointing at the card box', s.index, 0);
 }
 

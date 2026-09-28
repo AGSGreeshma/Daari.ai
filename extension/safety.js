@@ -64,6 +64,34 @@ self.DAARI_BOOKING_WORDS = [
   'రిజర్వేషన్'
 ];
 
+/* Is this something that ACTS, rather than something that goes somewhere?
+
+   The gate fires only on actionable controls. A link or a tab labelled
+   "Cancellations" navigates to a page about cancelling; it does not cancel
+   anything, and stopping the user from reading it is a false stop. A BUTTON
+   labelled "Cancel booking" does cancel something.
+
+   The trade, stated plainly: a site where "Pay Now" is a styled <a> rather than
+   a button would not be gated. That is a real risk on real sites, and the
+   mitigation is that such a link almost always carries role="button", which
+   counts below. If a site is found where it does not, this is the function to
+   revisit -- not the word list. */
+self.DAARI_ACTIONABLE_INPUT_TYPES = ['submit', 'button', 'reset', 'image'];
+
+self.DAARI_IS_ACTIONABLE = function (element) {
+  if (!element) { return false; }
+  var tag = String(element.tag || '').toLowerCase();
+  var type = String(element.type || '').toLowerCase();
+
+  if (tag === 'button') { return true; }
+  if (tag === 'input') {
+    return self.DAARI_ACTIONABLE_INPUT_TYPES.indexOf(type) !== -1;
+  }
+  /* For anything that is not an input, serializePage puts the ARIA role in
+     "type". A link dressed as a button is treated as a button. */
+  return type === 'button';
+};
+
 function containsAny(name, words) {
   for (var i = 0; i < words.length; i++) {
     if (name.indexOf(String(words[i]).toLowerCase()) !== -1) { return true; }

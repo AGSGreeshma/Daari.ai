@@ -67,20 +67,35 @@ const SYSTEM_PROMPT = [
   '   Never ask them to read a value back, and never repeat one.',
   '5. For a one-time code, card number, password or PIN, say only that they',
   '   should type it themselves.',
-  '6. FIRST, before choosing anything, answer goalAchievableHere: can THIS page,',
-  '   as listed below, actually accomplish what the user asked for? Not a later',
-  '   page, not after navigating somewhere else - this one. If the user wants to',
-  '   pay an electricity bill and this is a train booking page, the answer is',
-  '   false. If it is false, set elementIndex to null as well.',
-  '   Being useless here is a normal, correct answer. A wrong instruction is far',
-  '   worse, because this user will not second-guess you: if you point at the',
-  '   wrong button, they will press the wrong button.',
-  '7. confidence must be a real judgement, not a habit. Use the whole range.',
-  '   Below 0.4 means you are guessing.',
-  '8. Set stopAndConfirm true only for something irreversible: it takes money,',
-  '   submits something final, or cancels a booking. Not for ordinary typing.',
-  '   This is advisory - Daari decides its own stops in code - so an unnecessary',
-  '   true is simply noise.',
+  '6. YOU ARE CHOOSING ONE STEP IN AN ORDER, NOT FINISHING THE JOB.',
+  '   This is the mistake to avoid above all others. The user is filling in a',
+  '   form one box at a time, and you are asked once per step. Name the NEXT',
+  '   thing to do, not the thing that completes the whole goal.',
+  '   Concretely: do NOT pick the search, submit or continue button while boxes',
+  '   that need filling are still empty. Each element below says whether it is',
+  '   "filled" or "empty" - use that. Work top to bottom: the first empty box',
+  '   that the goal needs is almost always the answer. The button comes last,',
+  '   once the boxes are filled.',
+  '   If "Already done" lists nothing, assume nothing has been done yet and the',
+  '   user is at the very beginning.',
+  '   BUT: if a known route is given below, it OVERRIDES all of this ordering.',
+  '   Many sites pre-fill boxes with a default, so "filled" does not mean the',
+  '   user has checked it or meant it. A box the route names is the next step',
+  '   even when it already has something in it.',
+  '7. FIRST, before choosing anything, answer goal_supported: can what the user',
+  '   asked for actually be done on this site at all? If they want to pay an',
+  '   electricity bill and this is a railway site, the answer is false. If it is',
+  '   false, set elementIndex to null too.',
+  '   Being unable to help here is a normal, correct answer. A wrong instruction',
+  '   is far worse, because this user will not second-guess you: if you point at',
+  '   the wrong button, they will press the wrong button.',
+  '8. confidence must be a real judgement, not a habit. Use the whole range.',
+  '   Below 0.4 means you are guessing. Do not answer 0.9 out of politeness.',
+  '9. stopAndConfirm: true ONLY for money, a final booking confirmation, or',
+  '   cancelling something already booked.',
+  '   NEVER for typing in a box, searching, choosing from a dropdown, or moving',
+  '   to the next page. Those are not irreversible and a stop on them just',
+  '   teaches the user to dismiss stops without reading them.',
   '',
   'done_when says how to tell the step is finished. Choose exactly one of:',
   '  url_changed    pressing it loads a different page',
@@ -99,13 +114,13 @@ const RESPONSE_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    /* goalAchievableHere is FIRST on purpose: the model fills the fields in
+    /* goal_supported is FIRST on purpose: the model fills the fields in
        order, so it has to decide whether the page can do the job before it has
        committed to an element. Asking afterwards gets a rationalisation. */
-    required: ['goalAchievableHere', 'elementIndex', 'speech', 'done_when',
+    required: ['goal_supported', 'elementIndex', 'speech', 'done_when',
                'stopAndConfirm', 'confidence'],
     properties: {
-      goalAchievableHere: { type: 'boolean' },
+      goal_supported: { type: 'boolean' },
       elementIndex: { type: ['integer', 'null'] },
       speech: { type: 'string' },
       done_when: { type: 'string', enum: DONE_WHEN },
@@ -131,10 +146,11 @@ function buildUserPrompt(body) {
 
   if (body.recipeStep) {
     lines.push('');
-    lines.push('A known route through this site expects the next element to be');
+    lines.push('THE NEXT STEP OF A KNOWN ROUTE through this site is an element');
     lines.push('labelled one of: ' + (body.recipeStep.look_for || []).join(', '));
-    lines.push('Treat that as a strong hint. Still check it against the page,');
-    lines.push('and if the page clearly disagrees, follow the page.');
+    lines.push('If any element below matches one of those labels, THAT is your');
+    lines.push('answer. Do not substitute a later step you think is more useful.');
+    lines.push('Only ignore this if no element below plausibly matches it.');
     if (body.recipeStep.sensitive) {
       lines.push('This step is a code or card number: tell them to type it themselves.');
     }
@@ -317,10 +333,10 @@ module.exports = async (req, res) => {
 
   /* Default to true only when the field is genuinely absent (an older model in
      json_object mode). An explicit false is always honoured. */
-  const achievable = answer.goalAchievableHere !== false;
+  const achievable = answer.goal_supported !== false;
 
   res.status(200).json({
-    goalAchievableHere: achievable,
+    goal_supported: achievable,
     elementIndex: achievable && realIndex ? index : null,
     speech: String(answer.speech || '').slice(0, 300),
     done_when: DONE_WHEN.indexOf(answer.done_when) !== -1 ? answer.done_when : 'clicked',

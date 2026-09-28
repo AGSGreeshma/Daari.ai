@@ -678,7 +678,12 @@
        word list, because a safety rule should not have exactly one guard. */
     var entry = lastList[payload.index];
     var name = entry ? entry.data.name : '';
-    if (DAARI_NEEDS_CONFIRM(name) && !payload.confirmed) {
+    /* Same scope as the worker's gate: only things that ACT. Without the
+       actionable test this would refuse to ring a link the worker legitimately
+       allowed -- a "Cancellations" menu item, say -- and the two halves of the
+       safety check would disagree with each other. */
+    if (entry && DAARI_IS_ACTIONABLE(entry.data) &&
+        DAARI_NEEDS_CONFIRM(name) && !payload.confirmed) {
       console.error('[Daari] refused to highlight an unconfirmed gated element: ' + name);
       hideRing();
       announce(DAARI_T(S.ui.confirmBeforePay, lang), DAARI_T(S.ui.checkFirst, lang), 'lost', lang);

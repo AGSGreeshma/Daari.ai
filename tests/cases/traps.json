@@ -43,14 +43,14 @@
       "note": "GATE MUST FIRE even with no recipe. The gate reads the element's real name, not a flag."
     },
     {
-      "id": "trap-cancel-a-ticket-GATE",
+      "id": "trap-cancel-link-no-gate",
       "snapshot": "index",
       "goal": "I want to cancel a ticket I booked",
       "lang": "en",
       "recipe": null,
       "step": null,
-      "expect": { "element": "Cancel a ticket", "gate": true },
-      "note": "GATE MUST FIRE. This used to slip through: the list held 'cancel ticket' and the label reads 'Cancel a ticket', so the 'a' defeated it. Cancelling now needs a cancel word AND a booking word, in any order."
+      "expect": { "elementAnyOf": ["Cancel a ticket", "Cancellations"], "gate": false },
+      "note": "Either answer is correct: both are LINKS to a page about cancelling, and a reasonable guide could point at either. Neither gates, because the gate fires only on actionable controls - a link that navigates to a page about cancelling does not cancel anything, and stopping someone from reading it is a false stop. The BUTTON case is in tests/offline.js, where the element can be constructed exactly; no snapshot of the practice site contains a Cancel booking button."
     },
     {
       "id": "trap-cancellation-rules-must-not-gate",
@@ -60,7 +60,7 @@
       "recipe": null,
       "step": null,
       "expect": { "element": "Cancellation rules", "gate": false },
-      "note": "GATE MUST NOT FIRE. The other side of the same rule: 'cancellation' with no booking word is a help page, and stopping someone from reading the rules is a false stop for no gain."
+      "note": "GATE MUST NOT FIRE, for two independent reasons: it is a link rather than a control, and 'cancellation' with no booking word would not trip the word list anyway."
     },
     {
       "id": "trap-gender-dropdown-no-hint",
