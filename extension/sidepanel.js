@@ -45,12 +45,13 @@
     stopSpeak: document.getElementById('stopSpeak'),
     startDemo: document.getElementById('startDemo'),
     stopGuidance: document.getElementById('stopGuidance'),
-    voiceStatus: document.getElementById('voiceStatus')
+    voiceStatus: document.getElementById('voiceStatus'),
+    devBody: document.getElementById('devBody')
   };
 
-  /* Which flow "Start demo" runs. One hardcoded flow for now; Phase 6 picks
-     a recipe based on the goal the user spoke. */
-  var DEMO_FLOW_ID = 'practice-book-ticket';
+  /* The recipe "Start demo" forces, for when you want the booking walk without
+     speaking a goal. A spoken goal picks its own recipe by match_phrases. */
+  var DEMO_FLOW_ID = 'book-ticket';
 
   /* =================================================================
      Messages to the user
@@ -148,14 +149,45 @@
       el.counter.textContent = '';
       el.confirm.style.display = 'none';
       el.stopGuidance.style.display = 'none';
+      el.devBody.textContent = 'Nothing running.';
       return;
     }
 
-    el.counter.textContent = T(S.ui.stepOf, lang, {
-      n: status.number, total: status.total
-    });
+    /* With no recipe there is no known total, and Daari does not invent one. */
+    el.counter.textContent = status.total
+      ? T(S.ui.stepOf, lang, { n: status.number, total: status.total })
+      : T(S.ui.stepOnly, lang, { n: status.number });
+
     el.stopGuidance.style.display = 'block';
     el.confirm.style.display = status.awaitingConfirm ? 'block' : 'none';
+
+    showDeveloperDetails(status);
+  }
+
+  /* Which route each step took: "ai" means the model wrote the sentence and
+     picked the element; "fallback" means its answer was rejected and the
+     recipe's own element and pre-written phrase were used instead. */
+  function showDeveloperDetails(status) {
+    var lines = [];
+    lines.push('recipe: ' + (status.flowId || 'none (model only)'));
+    lines.push('AI calls: ' + status.aiCallCount + ' / ' + status.maxAiCalls);
+    lines.push('last path: ' + (status.lastPath || '-'));
+    lines.push('Telugu audio cached: ' + DAARI_TTS.cached() + ' phrase(s)');
+    if (DAARI_TTS.lastError()) { lines.push('TTS error: ' + DAARI_TTS.lastError()); }
+    lines.push('');
+
+    el.devBody.textContent = lines.join('\n');
+
+    (status.pathLog || []).forEach(function (entry) {
+      var row = document.createElement('div');
+      var tag = document.createElement('span');
+      tag.className = 'path-' + entry.path;
+      tag.textContent = entry.path;
+      row.appendChild(document.createTextNode('step ' + entry.step + ': '));
+      row.appendChild(tag);
+      if (entry.why) { row.appendChild(document.createTextNode('  (' + entry.why + ')')); }
+      el.devBody.appendChild(row);
+    });
   }
 
   function refreshStatus() {
@@ -227,30 +259,50 @@
     }
   }
 
-  /* Say something out loud. Returns true if a real voice spoke it. */
+  /* Say something out loud.
+
+     Three routes, in order of preference:
+       1. A voice Windows already has, in the right language.
+       2. For Telugu with no local voice: a chime, then audio from our API.
+       3. Nothing but the chime -- and the large caption does the work.
+
+     Never a wrong-language voice. A Hindi voice reading Telugu mispronounces
+     badly enough to be worse than saying nothing, and for the primary persona
+     that would undermine the whole thing. */
   function speak(text, code) {
-    if (!text || !window.speechSynthesis) { return false; }
+    if (!text) { return; }
 
     lastSpoken = { text: text, lang: code };
+    DAARI_TTS.stop();
+    if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
 
     var voice = pickVoice(code);
-    if (!voice) {
-      /* No voice for this language. Chime instead, and let the large caption
-         do the work. Phase 5 fills this gap for Telugu with OpenAI TTS. */
-      chime();
-      return false;
+
+    if (voice && window.speechSynthesis) {
+      var utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+      /* Slowly. These users are not in a hurry and may be hearing the
+         instruction for the first time. */
+      utterance.rate = 0.8;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+      return;
     }
 
-    window.speechSynthesis.cancel();
-    var utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-    /* Slowly. These users are not in a hurry and may be hearing the
-       instruction for the first time. */
-    utterance.rate = 0.8;
-    utterance.pitch = 1;
-    window.speechSynthesis.speak(utterance);
-    return true;
+    /* The chime stays, even now that Telugu can be spoken: it is the signal
+       that a NEW step has arrived, and it reads as such before the sentence
+       has even begun. */
+    chime();
+
+    if (code === 'te') {
+      /* Let the chime finish first, or the two overlap and neither is clear. */
+      window.setTimeout(function () {
+        DAARI_TTS.speak(text, code).then(function (spoke) {
+          if (!spoke) { describeVoices(); }   /* say why, honestly */
+        });
+      }, 380);
+    }
   }
 
   /* Tell the user honestly what Windows can and cannot say. */
@@ -262,9 +314,14 @@
       parts.push('<b>' + entry.english + ':</b> ' +
         (voice ? voice.name : 'no voice installed, captions and a chime only'));
     });
-    el.voiceStatus.innerHTML = parts.join('<br>') +
-      '<br><br>Telugu speech arrives in Phase 5. Until then a Telugu step shows large ' +
-      'text and plays a short chime, rather than being read in the wrong language.';
+    var note = pickVoice('te')
+      ? 'Telugu has a local voice, so no audio needs fetching.'
+      : ('No local Telugu voice, so Telugu is fetched from the Daari API as audio: ' +
+         'a chime, then the sentence. ' + DAARI_TTS.cached() + ' phrase(s) cached so far' +
+         (DAARI_TTS.lastError() ? '. Last attempt failed: ' + DAARI_TTS.lastError() +
+            ' - the large caption is carrying it instead.' : '.'));
+
+    el.voiceStatus.innerHTML = parts.join('<br>') + '<br><br>' + note;
   }
 
   /* =================================================================
@@ -293,6 +350,45 @@
     el.goal.appendChild(words);
     el.goal.style.display = 'block';
     el.goal.setAttribute('lang', lang);
+
+    /* Saying what you want IS the instruction. One action for the user: speak,
+       and the first ring appears. Stop guidance is right there if Daari
+       mis-heard. */
+    startFlow(trimmed, null);
+  }
+
+  /* Begin guiding. The worker matches the goal to a recipe, or decides there is
+     none and lets the model work alone. */
+  async function startFlow(goal, forcedFlowId) {
+    clearMessage();
+    try {
+      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      var tab = tabs[0];
+      if (!tab) { throw new Error('No page is open.'); }
+
+      var reply = await chrome.runtime.sendMessage({
+        type: 'DAARI_START_FLOW',
+        goal: goal,
+        flowId: forcedFlowId || undefined,
+        tabId: tab.id
+      });
+
+      /* The session exists now, so ask the page to report in with what it can
+         see. Everything after this is the worker's decision. */
+      await chrome.tabs.sendMessage(tab.id, { type: 'DAARI_ASK_AGAIN' });
+      refreshStatus();
+
+      if (reply && reply.aiOnly) {
+        showMessage('info',
+          'I have no saved route for this site, so I will read the page myself. ' +
+          'I will tell you if I am unsure rather than guessing.');
+      }
+    } catch (e) {
+      showMessage('bad',
+        'Could not start on that page.\n\n' +
+        'If the page was already open when the extension was reloaded, reload the ' +
+        'page (F5) and try again.\n\nDetails: ' + e.message);
+    }
   }
 
   function stopListening() {
@@ -442,31 +538,13 @@
 
   el.stopSpeak.addEventListener('click', function () {
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
+    DAARI_TTS.stop();   /* fetched Telugu audio has to be stopped separately */
   });
 
-  /* Starting a flow goes to the WORKER, not to the page. The worker creates
-     the session first, then tells the page what to do -- so the session
-     exists before anything can be drawn, and a page reload one second later
-     picks up exactly where it left off. */
-  el.startDemo.addEventListener('click', async function () {
-    clearMessage();
-    try {
-      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      var tab = tabs[0];
-      if (!tab) { throw new Error('No page is open.'); }
-
-      await chrome.runtime.sendMessage({
-        type: 'DAARI_START_FLOW',
-        flowId: DEMO_FLOW_ID,
-        tabId: tab.id,
-        goal: el.typedGoal.value.trim()
-      });
-      refreshStatus();
-    } catch (e) {
-      showMessage('bad',
-        'Could not start. If the page was already open when the extension was reloaded, ' +
-        'reload the page (F5) and try again.\n\nDetails: ' + e.message);
-    }
+  /* The manual way in, for when you want the booking walk without speaking.
+     Forces the recipe rather than matching a goal. */
+  el.startDemo.addEventListener('click', function () {
+    startFlow(el.typedGoal.value.trim() || 'book a train ticket', DEMO_FLOW_ID);
   });
 
   /* The confirm gate. The user is telling Daari they have read the screen --

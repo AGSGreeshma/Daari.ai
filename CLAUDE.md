@@ -69,7 +69,10 @@ instruction — it destroys the trust the whole product depends on.
   - `content/` is eyes and paintbrush only — it is destroyed on every navigation, so it must never
     hold session state.
 - `api/` — Vercel serverless functions (Node.js, CommonJS) that call OpenAI.
-- `recipes/` — JSON step-by-step guides per website task. Hints and safety nets, never scripts.
+- `extension/recipes/` — JSON step-by-step guides per website task. Hints and safety nets, never
+  scripts. They live **inside the extension**, not in the top-level `recipes/`, because an extension
+  can only read its own files — and a recipe fetched over HTTP would be gone exactly when the API is
+  down, which is the one moment the safety net matters. `recipes/README.md` is a pointer.
 - `practice/` — *Yatra Demo Rail*, a fictional train booking site for demos and tests. No real
   brands or logos.
 - `site/` — landing page.

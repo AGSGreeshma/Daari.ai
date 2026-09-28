@@ -9,6 +9,6 @@
 // No trailing slash. No API key here, ever -- this file ships inside the
 // extension, so anyone who installs Daari can read it.
 
-window.DAARI_CONFIG = {
+self.DAARI_CONFIG = {
   API_BASE: "https://daari-ai.vercel.app"  // <-- EDIT THIS ONE LINE
 };

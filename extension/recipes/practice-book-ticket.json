@@ -1,0 +1,173 @@
+{
+  "site": "daari-ai.vercel.app/practice",
+  "task": "book-ticket",
+  "label": "Book a train ticket on Yatra Demo Rail",
+
+  "_comment": "A recipe is a HINT and a SAFETY NET, not a script. The AI reads the live page on every step and writes the sentence itself; this file is passed to it as a clue, and is used verbatim only when the AI's answer is rejected. See extension/background.js for the validation gate. The say[] text here is the pre-written fallback phrasing.",
+
+  "match_phrases": {
+    "te": ["టికెట్", "బుక్", "ట్రైన్", "రైలు", "ప్రయాణం"],
+    "hi": ["टिकट", "बुक", "ट्रेन", "रेल", "यात्रा"],
+    "en": ["book", "ticket", "train", "reserve", "travel"]
+  },
+
+  "steps": [
+    {
+      "page": "index",
+      "look_for": ["from station"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Type where you are starting from",
+        "hi": "यहाँ अपना शुरुआती स्टेशन लिखिए",
+        "te": "మీరు ఏ స్టేషన్ నుండి బయలుదేరుతున్నారో ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "index",
+      "look_for": ["to station"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Now type the station you are going to",
+        "hi": "यहाँ अपना पहुँचने वाला स्टेशन लिखिए",
+        "te": "ఇప్పుడు వెళ్ళే స్టేషన్ ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "index",
+      "look_for": ["class"],
+      "done_when": "value_changed",
+      "_why": "The dropdown already reads Sleeper, so field_filled would be true before the user did anything and the step would finish instantly.",
+      "say": {
+        "en": "Tap here to choose your class",
+        "hi": "क्लास चुनने के लिए यहाँ दबाइए",
+        "te": "క్లాస్ ఎంచుకోడానికి ఇక్కడ నొక్కండి"
+      }
+    },
+    {
+      "page": "index",
+      "look_for": ["search trains"],
+      "done_when": "url_changed",
+      "say": {
+        "en": "Now press this Search Trains button",
+        "hi": "अब यह Search Trains बटन दबाइए",
+        "te": "ఇప్పుడు ఈ Search Trains బటన్ నొక్కండి"
+      }
+    },
+    {
+      "page": "results",
+      "look_for": ["book"],
+      "done_when": "url_changed",
+      "_why": "Four identical Book buttons. Daari rings the first and says 'next to the train you want', because it cannot know which train was meant.",
+      "say": {
+        "en": "Press Book next to the train you want",
+        "hi": "अपनी ट्रेन के आगे Book बटन दबाइए",
+        "te": "మీ ట్రైన్ పక్కన Book బటన్ నొక్కండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["passenger name"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Type the passenger name here",
+        "hi": "यहाँ यात्री का नाम लिखिए",
+        "te": "ప్రయాణికుడి పేరు ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["age"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Type the age here",
+        "hi": "यहाँ उम्र लिखिए",
+        "te": "వయస్సు ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["gender"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Choose the gender here",
+        "hi": "यहाँ लिंग चुनिए",
+        "te": "ఇక్కడ లింగం ఎంచుకోండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["mobile number"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Type the ten digit mobile number here",
+        "hi": "यहाँ दस अंकों का मोबाइल नंबर लिखिए",
+        "te": "పది అంకెల మొబైల్ నంబర్ ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["send otp"],
+      "done_when": "text_appears:demo one-time password",
+      "_why": "Waits for the code to actually become VISIBLE, not just for the button to be clicked, so Daari does not move on if nothing happened.",
+      "say": {
+        "en": "Press this Send OTP button",
+        "hi": "यह Send OTP बटन दबाइए",
+        "te": "ఈ Send OTP బటన్ నొక్కండి"
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["enter otp"],
+      "done_when": "field_filled",
+      "sensitive": true,
+      "say": {
+        "en": "The code is on the screen. Type it here yourself.",
+        "hi": "कोड स्क्रीन पर है। उसे खुद यहाँ लिखिए।",
+        "te": "కోడ్ స్క్రీన్ మీద ఉంది. దాన్ని మీరే ఇక్కడ టైప్ చేయండి."
+      }
+    },
+    {
+      "page": "passenger",
+      "look_for": ["continue to payment"],
+      "done_when": "url_changed",
+      "_why": "Trips the confirm gate on the word 'payment', which is the gate working rather than misfiring. See safety.js.",
+      "say": {
+        "en": "Now press Continue to Payment",
+        "hi": "अब Continue to Payment दबाइए",
+        "te": "ఇప్పుడు Continue to Payment నొక్కండి"
+      }
+    },
+    {
+      "page": "payment",
+      "look_for": ["card number"],
+      "done_when": "field_filled",
+      "sensitive": true,
+      "say": {
+        "en": "Type your card number here yourself. I never read it.",
+        "hi": "अपना कार्ड नंबर खुद यहाँ लिखिए। मैं उसे कभी नहीं पढ़ता।",
+        "te": "మీ కార్డ్ నంబర్ మీరే ఇక్కడ టైప్ చేయండి. నేను దాన్ని ఎప్పుడూ చదవను."
+      }
+    },
+    {
+      "page": "payment",
+      "look_for": ["pay"],
+      "done_when": "url_changed",
+      "confirm": true,
+      "say": {
+        "en": "Now press the Pay button",
+        "hi": "अब Pay बटन दबाइए",
+        "te": "ఇప్పుడు Pay బటన్ నొక్కండి"
+      }
+    },
+    {
+      "page": "confirmation",
+      "final": true,
+      "_why": "Nothing to point at. The caption STAYS -- no auto-clear, because the PNR is the thing the user needs to write down.",
+      "say": {
+        "en": "Your PNR is on the screen. Well done!",
+        "hi": "आपका PNR स्क्रीन पर है। बहुत बढ़िया!",
+        "te": "మీ PNR స్క్రీన్ మీద ఉంది. బాగా చేశారు!"
+      }
+    }
+  ]
+}

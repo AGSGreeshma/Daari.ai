@@ -30,122 +30,6 @@ self.DAARI_STRINGS = {
     { code: 'en', label: 'English', speech: 'en-IN', english: 'English' }
   ],
 
-  /* What Daari says for each of the three demo steps.
-
-     These line up BY INDEX with DEMO_STEPS in content/overlay.js, which holds
-     the matching look_for labels and done_when rules. Text lives here, logic
-     lives there. Both disappear in Phase 4, when real steps come from the AI. */
-  demoSay: [
-    {
-      en: 'Type where you are starting from',
-      hi: 'यहाँ अपना शुरुआती स्टेशन लिखिए',
-      te: 'మీరు ఏ స్టేషన్ నుండి బయలుదేరుతున్నారో ఇక్కడ టైప్ చేయండి'
-    },
-    {
-      en: 'Now type where you are going',
-      hi: 'अब आप कहाँ जा रहे हैं, वह लिखिए',
-      te: 'ఇప్పుడు మీరు ఎక్కడికి వెళ్తున్నారో టైప్ చేయండి'
-    },
-    {
-      en: 'Now press the Search Trains button',
-      hi: 'अब Search Trains बटन दबाइए',
-      te: 'ఇప్పుడు Search Trains బటన్ నొక్కండి'
-    }
-  ],
-
-  /* The full booking walk. Keys match sayKey in flows.js.
-
-     Every one of these is read aloud to someone who may be nervous and may be
-     hearing it for the first time, so: one action, "here" pointing at the
-     ring, and the loan words people actually say. Button names are left in
-     English on purpose, because that is what is printed on the screen -- a
-     translated button name would send the user hunting for words that are not
-     there. */
-  flow: {
-    fromStation: {
-      en: 'Type where you are starting from',
-      hi: 'यहाँ अपना शुरुआती स्टेशन लिखिए',
-      te: 'మీరు ఏ స్టేషన్ నుండి బయలుదేరుతున్నారో ఇక్కడ టైప్ చేయండి'
-    },
-    toStation: {
-      en: 'Now type the station you are going to',
-      hi: 'यहाँ अपना पहुँचने वाला स्टेशन लिखिए',
-      te: 'ఇప్పుడు వెళ్ళే స్టేషన్ ఇక్కడ టైప్ చేయండి'
-    },
-    chooseClass: {
-      en: 'Tap here to choose your class',
-      hi: 'क्लास चुनने के लिए यहाँ दबाइए',
-      te: 'క్లాస్ ఎంచుకోడానికి ఇక్కడ నొక్కండి'
-    },
-    pressSearch: {
-      en: 'Now press this Search Trains button',
-      hi: 'अब यह Search Trains बटन दबाइए',
-      te: 'ఇప్పుడు ఈ Search Trains బటన్ నొక్కండి'
-    },
-    pressBook: {
-      en: 'Press Book next to the train you want',
-      hi: 'अपनी ट्रेन के आगे Book बटन दबाइए',
-      te: 'మీ ట్రైన్ పక్కన Book బటన్ నొక్కండి'
-    },
-    passengerName: {
-      en: 'Type the passenger name here',
-      hi: 'यहाँ यात्री का नाम लिखिए',
-      te: 'ప్రయాణికుడి పేరు ఇక్కడ టైప్ చేయండి'
-    },
-    age: {
-      en: 'Type the age here',
-      hi: 'यहाँ उम्र लिखिए',
-      te: 'వయస్సు ఇక్కడ టైప్ చేయండి'
-    },
-    gender: {
-      en: 'Choose the gender here',
-      hi: 'यहाँ लिंग चुनिए',
-      te: 'ఇక్కడ లింగం ఎంచుకోండి'
-    },
-    mobile: {
-      en: 'Type the ten digit mobile number here',
-      hi: 'यहाँ दस अंकों का मोबाइल नंबर लिखिए',
-      te: 'పది అంకెల మొబైల్ నంబర్ ఇక్కడ టైప్ చేయండి'
-    },
-    sendOtp: {
-      en: 'Press this Send OTP button',
-      hi: 'यह Send OTP बटन दबाइए',
-      te: 'ఈ Send OTP బటన్ నొక్కండి'
-    },
-
-    /* Sensitive. Daari says where the code is, and never what it is. */
-    typeOtp: {
-      en: 'The code is on the screen. Type it here yourself.',
-      hi: 'कोड स्क्रीन पर है। उसे खुद यहाँ लिखिए।',
-      te: 'కోడ్ స్క్రీన్ మీద ఉంది. దాన్ని మీరే ఇక్కడ టైప్ చేయండి.'
-    },
-
-    continuePay: {
-      en: 'Now press Continue to Payment',
-      hi: 'अब Continue to Payment दबाइए',
-      te: 'ఇప్పుడు Continue to Payment నొక్కండి'
-    },
-
-    /* Sensitive. The second sentence is a promise, and it is true: see
-       accessibleName() and isFilled() in content/overlay.js. */
-    cardNumber: {
-      en: 'Type your card number here yourself. I never read it.',
-      hi: 'अपना कार्ड नंबर खुद यहाँ लिखिए। मैं उसे कभी नहीं पढ़ता।',
-      te: 'మీ కార్డ్ నంబర్ మీరే ఇక్కడ టైప్ చేయండి. నేను దాన్ని ఎప్పుడూ చదవను.'
-    },
-
-    pressPay: {
-      en: 'Now press the Pay button',
-      hi: 'अब Pay बटन दबाइए',
-      te: 'ఇప్పుడు Pay బటన్ నొక్కండి'
-    },
-    finished: {
-      en: 'Your PNR is on the screen. Well done!',
-      hi: 'आपका PNR स्क्रीन पर है। बहुत बढ़िया!',
-      te: 'మీ PNR స్క్రీన్ మీద ఉంది. బాగా చేశారు!'
-    }
-  },
-
   ui: {
     /* The confirm gate. Daari stops and will not point at the button until
        the user says they have looked. */
@@ -201,6 +85,31 @@ self.DAARI_STRINGS = {
       en: 'Step {n} of {total}',
       hi: 'चरण {n} / {total}',
       te: 'అడుగు {n} / {total}'
+    },
+
+    /* On a site with no recipe there is no known total, so Daari does not
+       pretend to know one. */
+    stepOnly: {
+      en: 'Step {n}',
+      hi: 'चरण {n}',
+      te: 'అడుగు {n}'
+    },
+
+    /* Said at 1.5 seconds, while we are still waiting on the model. Silence
+       reads as "broken" to a first-time user; this is the cheapest possible
+       way to say "still here". */
+    oneMoment: {
+      en: 'One moment...',
+      hi: 'एक पल...',
+      te: 'ఒక క్షణం...'
+    },
+
+    /* The 25-call budget is gone. Daari carries on from its own known route,
+       and says so rather than quietly getting worse. */
+    budgetSpent: {
+      en: 'I will use my saved route from here.',
+      hi: 'अब मैं अपना सहेजा हुआ रास्ता इस्तेमाल करूँगा।',
+      te: 'ఇక్కడ నుండి నా దగ్గర ఉన్న దారిని వాడుతాను.'
     },
 
     finished: {

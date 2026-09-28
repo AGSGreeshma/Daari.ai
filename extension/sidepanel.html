@@ -53,8 +53,17 @@
 
   <p class="voice-status" id="voiceStatus">Checking which voices Windows has...</p>
 
-  <!-- strings.js first: sidepanel.js reads every word from it. -->
+  <!-- Which path each step took. Collapsed, because it is for us, not for the
+       people Daari is built for. -->
+  <details class="dev">
+    <summary>Developer details</summary>
+    <div id="devBody">Nothing running.</div>
+  </details>
+
+  <!-- config.js and strings.js first: the others read from them. -->
+  <script src="config.js"></script>
   <script src="strings.js"></script>
+  <script src="tts.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -1,0 +1,56 @@
+{
+  "site": "daari-ai.vercel.app/practice",
+  "task": "check-pnr",
+  "label": "Check a PNR status on Yatra Demo Rail",
+
+  "_comment": "The first step points at the PNR Status menu link from the home page. If the user is ALREADY on the PNR page, the worker's forward rule skips that step by itself: the current step's page is 'index', the next step's page is 'pnr', and the page reporting in is 'pnr'. No special case needed.",
+
+  "match_phrases": {
+    "te": ["పిఎన్ఆర్", "స్టేటస్", "స్థితి", "pnr"],
+    "hi": ["पीएनआर", "स्टेटस", "स्थिति", "pnr"],
+    "en": ["pnr", "status", "check my booking", "is my ticket confirmed"]
+  },
+
+  "steps": [
+    {
+      "page": "index",
+      "look_for": ["pnr status", "check pnr status"],
+      "done_when": "url_changed",
+      "say": {
+        "en": "Press PNR Status in the menu at the top",
+        "hi": "ऊपर मेन्यू में PNR Status दबाइए",
+        "te": "పైన మెనూలో PNR Status నొక్కండి"
+      }
+    },
+    {
+      "page": "pnr",
+      "look_for": ["pnr number"],
+      "done_when": "field_filled",
+      "say": {
+        "en": "Type your ten digit PNR number here",
+        "hi": "यहाँ अपना दस अंकों का PNR नंबर लिखिए",
+        "te": "మీ పది అంకెల PNR నంబర్ ఇక్కడ టైప్ చేయండి"
+      }
+    },
+    {
+      "page": "pnr",
+      "look_for": ["check status"],
+      "done_when": "text_appears:pnr enquiry result",
+      "_why": "Pressing the button reveals a panel rather than loading a new page, so the rule waits for that panel's heading to become visible.",
+      "say": {
+        "en": "Now press Check status",
+        "hi": "अब Check status दबाइए",
+        "te": "ఇప్పుడు Check status నొక్కండి"
+      }
+    },
+    {
+      "page": "pnr",
+      "final": true,
+      "say": {
+        "en": "Your booking status is on the screen. Well done!",
+        "hi": "आपकी बुकिंग की स्थिति स्क्रीन पर है। बहुत बढ़िया!",
+        "te": "మీ బుకింగ్ స్థితి స్క్రీన్ మీద ఉంది. బాగా చేశారు!"
+      }
+    }
+  ]
+}

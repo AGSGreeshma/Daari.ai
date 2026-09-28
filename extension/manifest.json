@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Daari",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Guides you through any website by voice. Points at the next step. Never clicks for you.",
   "action": {
     "default_title": "Daari",
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["strings.js", "safety.js", "content/overlay.js"],
+      "js": ["strings.js", "safety.js", "matching.js", "content/overlay.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

@@ -1,23 +1,95 @@
 /* Daari's brain -- the service worker.
 
-   It holds the session: what the user is trying to do, which step they are on,
-   and what has happened. It lives here and not in the page because the content
-   script is destroyed on every page load, and a booking flow is nothing but
-   page loads.
+   It holds the session, decides each step, and is the only place that talks to
+   our API. It lives here and not in the page because the content script is
+   destroyed on every page load, and a booking flow is nothing but page loads.
 
-   THE ONE RULE IN THIS FILE: the session is read from chrome.storage.session
-   at the start of every single message, and written back at the end. There is
-   no in-memory copy. Chrome can stop this worker between any two messages --
-   after about 30 seconds of quiet -- and with no cached state there is nothing
-   to lose and nothing to restore. "Reload it on worker start" becomes a
-   non-event rather than a code path that has to be right.
+   THE ONE RULE IN THIS FILE: the session is read from chrome.storage.session at
+   the start of every single message and written back at the end. There is no
+   in-memory copy. Chrome can stop this worker between any two messages -- after
+   about 30 seconds of quiet -- and with no cached state there is nothing to lose
+   and nothing to restore.
 
-   No AI here yet. Phase 5 adds the call; aiCallCount is already in the session
-   so the 25-step budget cap has somewhere to live. */
+   HOW A STEP IS DECIDED, in one paragraph. The recipe (if any) is resolved
+   locally first, so the safety net is ready BEFORE we ask anyone anything. Then
+   the model is asked, on every step, with the recipe passed in as a hint. Its
+   answer is used only if it agrees with the recipe about WHICH element; on any
+   disagreement, timeout, bad schema or low confidence, Daari falls back to the
+   recipe's own element and its pre-written sentence. With no recipe at all the
+   model works alone, and is believed only when it is confident. */
 
-importScripts('strings.js', 'safety.js', 'flows.js');
+importScripts('config.js', 'strings.js', 'safety.js', 'matching.js');
 
 var SESSION_KEY = 'daariSession';
+
+/* The recipes Daari knows. An extension cannot list its own directory, so the
+   filenames are named here. */
+var RECIPE_FILES = ['practice-book-ticket', 'practice-check-pnr'];
+
+/* Budget, from CLAUDE.md rule 6. Counted in the worker, which is the only place
+   that can actually spend money. */
+var MAX_AI_CALLS = 25;
+
+/* How long to wait for our API before giving up and using the recipe. The page
+   speaks "one moment" at 1.5s so the user is not left in silence. */
+var AI_TIMEOUT_MS = 6000;
+
+/* Below this, the model's answer is not trusted. A wrong instruction is far
+   worse for this audience than admitting uncertainty. */
+var MIN_CONFIDENCE = 0.45;
+
+/* =================================================================
+   Recipes -- static data, so caching them in the worker is fine.
+   Losing the cache when the worker sleeps costs one re-read of two
+   small files.
+   ================================================================= */
+
+var recipeCache = null;
+
+async function allRecipes() {
+  if (recipeCache) { return recipeCache; }
+
+  var loaded = {};
+  for (var i = 0; i < RECIPE_FILES.length; i++) {
+    var name = RECIPE_FILES[i];
+    try {
+      var response = await fetch(chrome.runtime.getURL('recipes/' + name + '.json'));
+      var recipe = await response.json();
+      loaded[recipe.task] = recipe;
+    } catch (e) {
+      console.error('[Daari] could not load recipe ' + name, e);
+    }
+  }
+  recipeCache = loaded;
+  return loaded;
+}
+
+/* Which recipe, if any, is this spoken goal asking for?
+
+   Every language's phrases are checked regardless of the chosen language,
+   because people mix languages when they speak -- "PNR status చెక్ చేయాలి" is
+   completely normal. The recipe matching the most phrases wins. */
+async function matchRecipe(goal) {
+  var text = String(goal || '').toLowerCase();
+  if (!text) { return null; }
+
+  var recipes = await allRecipes();
+  var best = null;
+  var bestHits = 0;
+
+  Object.keys(recipes).forEach(function (task) {
+    var phrases = recipes[task].match_phrases || {};
+    var hits = 0;
+    Object.keys(phrases).forEach(function (lang) {
+      (phrases[lang] || []).forEach(function (phrase) {
+        if (text.indexOf(String(phrase).toLowerCase()) !== -1) { hits += 1; }
+      });
+    });
+    if (hits > bestHits) { bestHits = hits; best = task; }
+  });
+
+  return best;
+}
 
 /* =================================================================
    The session
@@ -38,22 +110,17 @@ async function clearSession() {
   broadcastStatus(null);
 }
 
-/* The language is read fresh from storage rather than trusted from the
-   session, so switching language halfway through a booking takes effect on
-   the very next instruction. */
+/* Read fresh rather than trusted from the session, so switching language
+   halfway through a booking takes effect on the very next instruction. */
 async function currentLang() {
   var stored = await chrome.storage.local.get({ lang: 'te' });
   return stored.lang;
 }
 
-function flowFor(session) {
-  return session ? self.DAARI_FLOWS[session.flowId] : null;
-}
-
-function stepAt(session) {
-  var flow = flowFor(session);
-  if (!flow) { return null; }
-  return flow.steps[session.stepIndex] || null;
+async function recipeFor(session) {
+  if (!session || !session.flowId) { return null; }
+  var recipes = await allRecipes();
+  return recipes[session.flowId] || null;
 }
 
 /* "field_filled:mobile number" -> "field_filled" */
@@ -65,71 +132,272 @@ function ruleKind(rule) {
    walked past. -1 if the user has not been on this page yet.
 
    The FIRST step on the page, deliberately: arriving back at the search page
-   means filling the search form again from the top, not resuming halfway down
-   a form whose boxes have been reset. */
-function firstStepOnPage(flow, page, beforeIndex) {
-  for (var i = 0; i < beforeIndex && i < flow.steps.length; i++) {
-    if (flow.steps[i].page === page) { return i; }
+   means filling the search form again from the top, not resuming halfway down a
+   form whose boxes have been reset. */
+function firstStepOnPage(recipe, page, beforeIndex) {
+  for (var i = 0; i < beforeIndex && i < recipe.steps.length; i++) {
+    if (recipe.steps[i].page === page) { return i; }
   }
   return -1;
 }
 
-/* =================================================================
-   Describing a step to the page
-
-   The worker resolves the SENTENCE (it knows the language) and the page
-   resolves the ELEMENT (it knows the DOM). Neither does the other's job.
-   ================================================================= */
-
-async function describeStep(session) {
-  var flow = flowFor(session);
-  if (!flow) { return { active: false }; }
-
-  var step = flow.steps[session.stepIndex];
-  var lang = await currentLang();
-
-  if (!step) {
-    /* Walked off the end of the flow. */
-    return { active: false, finished: true };
-  }
-
-  return {
-    active: true,
-    index: session.stepIndex,
-    number: session.stepIndex + 1,
-    total: flow.steps.length,
-    lang: lang,
-    look_for: step.look_for || [],
-    done_when: step.done_when || '',
-    sensitive: !!step.sensitive,
-    final: !!step.final,
-    /* Has the user already said "I have checked" for this exact step? */
-    confirmed: session.confirmedStep === session.stepIndex,
-    say: self.DAARI_T(self.DAARI_STRINGS.flow[step.sayKey], lang),
-    stepLabel: self.DAARI_T(self.DAARI_STRINGS.ui.stepOf, lang, {
-      n: session.stepIndex + 1,
-      total: flow.steps.length
-    })
-  };
-}
-
 /* Move to the next step.
 
-   history deliberately records only the step number, its key and the time.
-   Nothing read from the page goes in here -- not even an element's label --
-   so there is no route by which anything the user typed could end up in
-   stored state. */
-function advance(session, url) {
-  var step = stepAt(session);
+   history records only the step number, the recipe's own label for it, and the
+   time. Nothing read from the page is stored -- not even an element's label --
+   so there is no route by which anything the user typed could reach stored
+   state. */
+function advance(session, recipe, url) {
+  var step = recipe ? recipe.steps[session.stepIndex] : null;
   session.history.push({
     step: session.stepIndex,
-    sayKey: step ? step.sayKey : null,
+    label: step && step.look_for ? step.look_for[0] : null,
     at: Date.now()
   });
+  if (session.history.length > 40) { session.history.shift(); }
   session.stepIndex += 1;
   session.confirmedStep = null;
   session.awaitingConfirm = null;
   if (url) { session.stepUrl = url; }
+}
+
+/* =================================================================
+   Asking the model
+   ================================================================= */
+
+async function callAi(session, page, recipeStep, lang) {
+  var base = self.DAARI_CONFIG && self.DAARI_CONFIG.API_BASE;
+  if (!base) { return { ok: false, reason: 'no API_BASE in config.js' }; }
+
+  /* Rule 2, checked again on the way out. The page already promises this, but
+     a rule this important does not depend on one place remembering. */
+  var forbidden = self.DAARI_FIND_FORBIDDEN_FIELDS(page.elements);
+  if (forbidden.length) {
+    console.error('[Daari] REFUSING to send elements carrying: ' + forbidden.join(', '));
+    return { ok: false, reason: 'forbidden fields in payload' };
+  }
+
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, AI_TIMEOUT_MS);
+
+  try {
+    var response = await fetch(base + '/api/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        goal: session.goal || '',
+        lang: lang,
+        url: page.url,
+        title: page.title,
+        elements: page.elements,
+        recipeStep: recipeStep
+          ? { look_for: recipeStep.look_for, sensitive: !!recipeStep.sensitive }
+          : null,
+        history: session.history.slice(-8).map(function (h) {
+          return h.label || ('step ' + (h.step + 1));
+        })
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return { ok: false, reason: 'http ' + response.status };
+    }
+
+    var answer = await response.json();
+
+    /* Schema check. An answer that is the wrong shape is treated exactly like
+       no answer at all: the recipe takes over. */
+    if (typeof answer.speech !== 'string' || !answer.speech.trim()) {
+      return { ok: false, reason: 'no speech in answer' };
+    }
+    if (typeof answer.confidence !== 'number') {
+      return { ok: false, reason: 'no confidence in answer' };
+    }
+    if (answer.elementIndex !== null && !Number.isInteger(answer.elementIndex)) {
+      return { ok: false, reason: 'elementIndex not an integer' };
+    }
+
+    return { ok: true, answer: answer };
+
+  } catch (error) {
+    return { ok: false, reason: error && error.name === 'AbortError' ? 'timeout' : String(error) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* =================================================================
+   Deciding one step
+
+   The worker resolves the SENTENCE and WHICH element; the page resolves the
+   DOM and draws. Neither does the other's job.
+   ================================================================= */
+
+async function decideStep(session, page) {
+  var recipe = await recipeFor(session);
+  var recipeStep = recipe ? recipe.steps[session.stepIndex] : null;
+  var lang = await currentLang();
+  var S = self.DAARI_STRINGS;
+
+  if (recipe && !recipeStep) {
+    return { active: false, finished: true };
+  }
+
+  var payload = {
+    active: true,
+    number: session.stepIndex + 1,
+    total: recipe ? recipe.steps.length : 0,
+    lang: lang,
+    sensitive: !!(recipeStep && recipeStep.sensitive),
+    final: !!(recipeStep && recipeStep.final),
+    gate: false,
+    index: -1,
+    done_when: '',
+    stepLabel: '',
+    /* Sent so the page can run its own independent gate check. Defence in
+       depth: a safety rule should not have exactly one guard. */
+    confirmed: session.confirmedStep === session.stepIndex
+  };
+
+  payload.stepLabel = payload.total
+    ? self.DAARI_T(S.ui.stepOf, lang, { n: payload.number, total: payload.total })
+    : self.DAARI_T(S.ui.stepOnly, lang, { n: payload.number });
+
+  /* The last step of a recipe points at nothing. */
+  if (payload.final) {
+    payload.say = self.DAARI_T(recipeStep.say, lang);
+    payload.path = 'recipe';
+    return payload;
+  }
+
+  var elements = (page && page.elements) || [];
+
+  /* The safety net is built FIRST, before anyone is asked anything, so it is
+     already in hand whatever happens next. */
+  var recipeIndex = recipeStep
+    ? self.DAARI_RESOLVE_BY_NAME(elements, recipeStep.look_for || [])
+    : -1;
+
+  /* ---- the confirm gate, part one ------------------------------------------
+
+     When the recipe already knows which element this is, the gate is checked
+     BEFORE spending a call on it. There is no point paying the model to phrase
+     a step we are not going to show yet. */
+  if (recipeIndex !== -1 &&
+      gateApplies(elements[recipeIndex], recipeStep, null) &&
+      session.confirmedStep !== session.stepIndex) {
+    return gatePayload(payload, session, lang);
+  }
+
+  /* ---- ask the model ------------------------------------------------------ */
+  var ai = null;
+  var reason = null;
+
+  if (session.aiCallCount >= MAX_AI_CALLS) {
+    session.budgetHit = true;
+    reason = 'budget of ' + MAX_AI_CALLS + ' calls used up';
+  } else if (elements.length) {
+    session.aiCallCount += 1;
+    var attempt = await callAi(session, page, recipeStep, lang);
+    if (attempt.ok) { ai = attempt.answer; } else { reason = attempt.reason; }
+  } else {
+    reason = 'nothing on the page to choose from';
+  }
+
+  /* ---- THE VALIDATION GATE ------------------------------------------------
+
+     The model's answer is used only when it agrees with the recipe about WHICH
+     element. Note what this compares: two indices, computed by the same
+     matching code on the same list. Not two strings, fuzzily.
+
+     When there is no recipe, there is nothing to agree with, so the answer is
+     judged on its own confidence alone. */
+  var usable = ai && ai.elementIndex !== null &&
+               ai.confidence >= MIN_CONFIDENCE &&
+               elements[ai.elementIndex];
+
+  if (usable && (!recipeStep || ai.elementIndex === recipeIndex)) {
+    payload.index = ai.elementIndex;
+    payload.say = ai.speech;
+    payload.done_when = ai.done_when || (recipeStep && recipeStep.done_when) || 'clicked';
+    payload.path = 'ai';
+    payload.confidence = ai.confidence;
+
+  } else if (recipeStep && recipeIndex !== -1) {
+    payload.index = recipeIndex;
+    payload.say = self.DAARI_T(recipeStep.say, lang);
+    payload.done_when = recipeStep.done_when || 'clicked';
+    payload.path = 'fallback';
+    payload.why = ai
+      ? (ai.elementIndex === null ? 'model found nothing'
+          : ai.confidence < MIN_CONFIDENCE ? 'model unsure (' + ai.confidence + ')'
+          : 'model chose a different element')
+      : reason;
+
+  } else {
+    /* Neither the model nor a recipe can say what to do. Say so. */
+    payload.index = -1;
+    payload.say = self.DAARI_T(S.ui.notSure, lang);
+    payload.path = 'none';
+    payload.why = reason || 'no element matched';
+  }
+
+  /* ---- the confirm gate, part two ----------------------------------------
+
+     For an element the model chose on its own, the gate is checked here, once
+     we know what it picked. The model's stopAndConfirm is OR-ed in, so it can
+     only ever ADD a stop -- never remove the one our own code decided on. */
+  if (payload.index !== -1 &&
+      gateApplies(elements[payload.index], recipeStep, ai) &&
+      session.confirmedStep !== session.stepIndex) {
+    return gatePayload(payload, session, lang);
+  }
+
+  session.awaitingConfirm = null;
+  session.lastPath = payload.path;
+  rememberPath(session, payload);
+
+  if (session.budgetHit && !session.budgetToldUser) {
+    session.budgetToldUser = true;
+    payload.notice = self.DAARI_T(S.ui.budgetSpent, lang);
+  }
+
+  return payload;
+}
+
+/* Does Daari have to stop before pointing at this?
+
+   Three independent reasons, any one of which is enough. The first is our own
+   code and is the one that matters; the other two can only add to it. */
+function gateApplies(element, recipeStep, ai) {
+  if (!element) { return false; }
+  return self.DAARI_NEEDS_CONFIRM(element.name) ||
+         !!(recipeStep && recipeStep.confirm === true) ||
+         !!(ai && ai.stopAndConfirm === true);
+}
+
+/* A gated step carries NO element index, so the page cannot ring the button
+   even if it wanted to. */
+function gatePayload(payload, session, lang) {
+  session.awaitingConfirm = session.stepIndex;
+  payload.gate = true;
+  payload.index = -1;
+  payload.done_when = '';
+  payload.say = self.DAARI_T(self.DAARI_STRINGS.ui.confirmBeforePay, lang);
+  payload.stepLabel = self.DAARI_T(self.DAARI_STRINGS.ui.checkFirst, lang);
+  payload.path = 'gate';
+  return payload;
+}
+
+function rememberPath(session, payload) {
+  session.pathLog = session.pathLog || [];
+  session.pathLog.push({
+    step: session.stepIndex + 1,
+    path: payload.path,
+    why: payload.why || null
+  });
+  if (session.pathLog.length > 30) { session.pathLog.shift(); }
 }
 
 /* =================================================================
@@ -148,23 +416,27 @@ async function tellPage(message, tabId) {
     await chrome.tabs.sendMessage(id, message);
   } catch (e) {
     /* No content script in that tab (a chrome:// page, or one not reloaded
-       since the extension was installed). Not an error worth shouting about. */
+       since the extension was installed). Not worth shouting about. */
   }
 }
 
-/* Tell the side panel where we are. The panel is often closed, and that is
-   fine -- nobody is listening and the guidance carries on regardless. */
+/* Tell the side panel where we are. The panel is often closed, and that is fine
+   -- nobody is listening and the guidance carries on regardless. */
 function broadcastStatus(session) {
   var payload = { type: 'DAARI_STATUS', active: false };
 
   if (session) {
-    var flow = flowFor(session);
     payload.active = true;
     payload.number = session.stepIndex + 1;
-    payload.total = flow ? flow.steps.length : 0;
+    payload.total = session.total || 0;
     payload.awaitingConfirm = session.awaitingConfirm !== null &&
                               session.awaitingConfirm !== undefined;
     payload.finished = !!session.finished;
+    payload.lastPath = session.lastPath || null;
+    payload.aiCallCount = session.aiCallCount || 0;
+    payload.maxAiCalls = MAX_AI_CALLS;
+    payload.pathLog = (session.pathLog || []).slice(-8);
+    payload.flowId = session.flowId || null;
   }
 
   try {
@@ -179,89 +451,83 @@ function broadcastStatus(session) {
 
 var HANDLERS = {
 
-  /* The panel pressed "start". */
+  /* A goal was spoken or typed. Match it to a recipe if we can; otherwise the
+     model works alone on whatever site this is. */
   DAARI_START_FLOW: async function (message) {
     var lang = await currentLang();
+    var task = message.flowId || await matchRecipe(message.goal);
+    var recipes = await allRecipes();
+    var recipe = task ? recipes[task] : null;
+
     var session = {
       goal: message.goal || '',
       lang: lang,
-      flowId: message.flowId,
+      flowId: task || null,
+      total: recipe ? recipe.steps.length : 0,
       stepIndex: 0,
       history: [],
-      aiCallCount: 0,        /* Phase 5 budget cap lives here */
+      aiCallCount: 0,
+      pathLog: [],
       stepUrl: null,
       confirmedStep: null,
       awaitingConfirm: null,
       finished: false,
+      budgetHit: false,
+      budgetToldUser: false,
+      lastPath: null,
       startedAt: Date.now()
     };
     await saveSession(session);
 
-    var payload = await describeStep(session);
-    await tellPage({ type: 'DAARI_RUN_STEP', step: payload }, message.tabId);
-    return { ok: true };
+    return { ok: true, flowId: session.flowId, aiOnly: !recipe };
   },
 
-  /* A page just finished loading and is asking whether it has a job.
+  /* A page loaded (or was resumed) and is asking what to do, handing over what
+     it can see.
 
-     This is also where every URL decision is settled. Doing it here rather
-     than in the page means nothing depends on a message escaping a page that
-     is in the middle of being destroyed -- which is the race that makes
-     cross-page flows flaky.
+     This is also where every URL decision is settled. Doing it here rather than
+     in the page means nothing depends on a message escaping a page that is
+     being destroyed -- the race that makes cross-page flows flaky.
 
-     Three things can be true of the page that just reported in:
-
-       it is the page the current step belongs to  -> carry on, same step
-       it is the page the NEXT step belongs to     -> the step completed
-       it is the page of an EARLIER step           -> the user pressed Back
-
-     Anything else is a page the flow knows nothing about, and the step is
-     left alone: the element will not resolve and Daari will say so honestly
-     rather than pointing at something on a page it did not expect. */
+       the page of the current step  -> carry on, same step
+       the page of the NEXT step     -> the step completed, advance
+       the page of an EARLIER step   -> the user pressed Back
+       anything else                 -> leave the step alone */
   DAARI_PAGE_READY: async function (message) {
     var session = await getSession();
     if (!session) { return { active: false }; }
 
-    var flow = flowFor(session);
-    var step = stepAt(session);
+    var recipe = await recipeFor(session);
+    var step = recipe ? recipe.steps[session.stepIndex] : null;
     var here = self.DAARI_PAGE_OF(message.url);
     var notice = null;
 
-    if (flow && step) {
-      var nextStep = flow.steps[session.stepIndex + 1];
+    if (recipe && step) {
+      var nextStep = recipe.steps[session.stepIndex + 1];
 
       if (step.page && here === step.page) {
-        /* Same page as the current step. A reload, or a navigation that came
-           straight back. Nothing to do. */
+        /* Same page. A reload, or coming straight back. Nothing to do. */
 
       } else if (ruleKind(step.done_when) === 'url_changed' &&
                  nextStep && nextStep.page && here === nextStep.page) {
-        /* Forward, and only forward: the new page is specifically the one the
-           NEXT step belongs to. A URL that merely differs is not enough. */
-        advance(session, message.url);
+        advance(session, recipe, message.url);
 
       } else {
-        /* Did the user press Back? Look for this page among the steps already
-           walked, and return to the FIRST step on it -- not the one they were
-           last on, because going back to a page means starting that page
-           again. */
-        var backTo = firstStepOnPage(flow, here, session.stepIndex);
+        var backTo = firstStepOnPage(recipe, here, session.stepIndex);
         if (backTo !== -1) {
           session.stepIndex = backTo;
           session.confirmedStep = null;
           session.awaitingConfirm = null;
           session.finished = false;
-          session.stepUrl = message.url;
           notice = 'wentBack';
         }
       }
     }
 
     session.stepUrl = message.url;
-    var payload = await describeStep(session);
+    var payload = await decideStep(session, message);
     if (notice) {
-      var lang = await currentLang();
-      payload.notice = self.DAARI_T(self.DAARI_STRINGS.ui[notice], lang);
+      payload.notice = self.DAARI_T(self.DAARI_STRINGS.ui[notice], await currentLang());
     }
     if (payload.final) { session.finished = true; }
     await saveSession(session);
@@ -273,23 +539,17 @@ var HANDLERS = {
     var session = await getSession();
     if (!session) { return { active: false }; }
 
-    advance(session, message.url);
-    var payload = await describeStep(session);
+    var recipe = await recipeFor(session);
+    advance(session, recipe, message.url);
+
+    var payload = await decideStep(session, message);
     if (payload.final) { session.finished = true; }
     await saveSession(session);
     return payload;
   },
 
-  /* The page is about to point at something dangerous and has stopped. */
-  DAARI_NEEDS_CONFIRM: async function () {
-    var session = await getSession();
-    if (!session) { return { ok: false }; }
-    session.awaitingConfirm = session.stepIndex;
-    await saveSession(session);
-    return { ok: true };
-  },
-
-  /* The user pressed "I have checked". */
+  /* The user pressed "I have checked". The page is asked to report in again
+     with fresh elements, rather than the worker keeping a copy of the page. */
   DAARI_CONFIRMED: async function () {
     var session = await getSession();
     if (!session) { return { ok: false }; }
@@ -298,8 +558,7 @@ var HANDLERS = {
     session.awaitingConfirm = null;
     await saveSession(session);
 
-    var payload = await describeStep(session);
-    await tellPage({ type: 'DAARI_RUN_STEP', step: payload });
+    await tellPage({ type: 'DAARI_ASK_AGAIN' });
     return { ok: true };
   },
 
@@ -312,24 +571,27 @@ var HANDLERS = {
   DAARI_GET_STATUS: async function () {
     var session = await getSession();
     if (!session) { return { active: false }; }
-    var flow = flowFor(session);
     return {
       active: true,
       number: session.stepIndex + 1,
-      total: flow ? flow.steps.length : 0,
+      total: session.total || 0,
       awaitingConfirm: session.awaitingConfirm !== null &&
                        session.awaitingConfirm !== undefined,
       finished: !!session.finished,
-      goal: session.goal
+      goal: session.goal,
+      lastPath: session.lastPath || null,
+      aiCallCount: session.aiCallCount || 0,
+      maxAiCalls: MAX_AI_CALLS,
+      pathLog: (session.pathLog || []).slice(-8),
+      flowId: session.flowId || null
     };
   }
 };
 
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   /* Anything we do not handle is left alone. The panel and the content script
-     talk to each other through this same channel, and returning true for
-     their messages would leave those senders waiting for a reply that never
-     comes. */
+     talk to each other through this same channel, and returning true for their
+     messages would leave those senders waiting for a reply that never comes. */
   if (!message || !message.type || !HANDLERS[message.type]) { return false; }
 
   HANDLERS[message.type](message, sender).then(sendResponse).catch(function (error) {

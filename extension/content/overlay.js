@@ -390,62 +390,6 @@
      VERIFY  -- local, free, no AI involved
      ================================================================= */
 
-  /* ---- matching a step's words to an element on this page ---------------
-
-     Steps target elements BY NAME, never by index. An index is a property of
-     one particular page at one particular moment; "Send OTP" is a property of
-     the thing itself. */
-
-  function normalizeName(text) {
-    return String(text || '')
-      .toLowerCase()
-      .replace(/[*:]/g, ' ')          /* "Age *" and "Age:" both become "age" */
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function escapeForRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  /* How well does this element's name match what we are looking for?
-
-     Plain substring matching is not enough, and the practice site proves it:
-     looking for "age" on the passenger page, an indexOf would match "Tourism
-     Packages" up in the menu long before reaching the Age box. So an exact
-     match wins, then a match at the start, then a whole word, and only then a
-     substring. */
-  function nameScore(name, want) {
-    var have = normalizeName(name);
-    var need = normalizeName(want);
-    if (!have || !need) { return 0; }
-    if (have === need) { return 100; }
-    if (have.indexOf(need) === 0) { return 80; }
-    if (new RegExp('(^|\\s)' + escapeForRegExp(need) + '($|\\s)').test(have)) { return 60; }
-    if (have.indexOf(need) !== -1) { return 30; }
-    return 0;
-  }
-
-  /* Which element is this step talking about? -1 when nothing matches, and
-     Daari then says it is not sure rather than pointing at a guess.
-
-     Labels are tried in priority order: if the first one matches anything at
-     all, later ones are not consulted. Within a label the best score wins,
-     and ties go to whatever comes first -- which, after serializePage, means
-     whatever is on screen. */
-  function resolveByName(list, labels) {
-    for (var l = 0; l < labels.length; l++) {
-      var bestIndex = -1;
-      var bestScore = 0;
-      for (var i = 0; i < list.length; i++) {
-        var score = nameScore(list[i].name, labels[l]);
-        if (score > bestScore) { bestScore = score; bestIndex = i; }
-      }
-      if (bestIndex !== -1) { return bestIndex; }
-    }
-    return -1;
-  }
-
   /* Text the user can actually see. innerText respects display:none, which
      textContent does not -- and that difference matters: the practice site's
      OTP message sits in the page from the start, just hidden. Matching on
@@ -489,7 +433,7 @@
     if (kind === 'clicked' || kind === 'field_filled' || kind === 'value_changed') {
       var index = defaultIndex;
       if (argument) {
-        index = resolveByName(lastList.map(function (e) { return e.data; }), [argument]);
+        index = DAARI_RESOLVE_BY_NAME(lastList.map(function (e) { return e.data; }), [argument]);
       }
       el = lastList[index] ? lastList[index].el : null;
     }
@@ -537,7 +481,7 @@
           }
         } else if (kind === 'element_gone') {
           var list = serializePage();
-          if (resolveByName(list, [argument]) === -1) { finish(); }
+          if (DAARI_RESOLVE_BY_NAME(list, [argument]) === -1) { finish(); }
         }
       }, 200);
     }
@@ -639,8 +583,56 @@
     clearAll();
   }
 
-  /* Do one step: find the thing, check it is safe to point at, point at it,
-     then watch for the user to do it. */
+  /* Ask the worker what to do, handing over everything we can see.
+
+     The elements go with the question because the worker needs them twice: to
+     resolve the recipe's own element, and to ask the model. It answers with an
+     index INTO THIS LIST, so nothing is resolved twice and the two sides cannot
+     disagree about which element index 12 means.
+
+     While we wait, a filler is spoken at 1.5 seconds. The model gets up to 6,
+     and silence for six seconds reads as "broken" to a first-time user. */
+  var fillerTimer = null;
+
+  function requestStep(type) {
+    var list = serializePage();
+
+    /* Rule 2, checked on the way out. If this ever trips, something upstream is
+       broken and the right move is to say so loudly, not to send it. */
+    var forbidden = DAARI_FIND_FORBIDDEN_FIELDS(list);
+    if (forbidden.length) {
+      console.error('[Daari] NOT SENDING: elements carried ' + forbidden.join(', '));
+      return Promise.resolve(null);
+    }
+
+    startFiller();
+
+    return ask({
+      type: type,
+      url: location.href,
+      title: document.title || '',
+      elements: list
+    }).then(function (payload) {
+      stopFiller();
+      return payload;
+    });
+  }
+
+  function startFiller() {
+    stopFiller();
+    fillerTimer = window.setTimeout(function () {
+      fillerTimer = null;
+      var lang = (currentStepPayload && currentStepPayload.lang) || 'te';
+      announce(DAARI_T(DAARI_STRINGS.ui.oneMoment, lang), '', '', lang);
+    }, 1500);
+  }
+
+  function stopFiller() {
+    if (fillerTimer !== null) { window.clearTimeout(fillerTimer); fillerTimer = null; }
+  }
+
+  /* Do one step. The worker has already decided WHICH element and WHAT to say;
+     this finds it on screen, points at it, and watches for the user. */
   function runStep(payload) {
     if (stopWatching) { stopWatching(); stopWatching = null; }
     if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
@@ -650,86 +642,73 @@
 
     var S = DAARI_STRINGS;
     var lang = payload.lang;
+    var say = payload.notice ? payload.notice + ' ' + payload.say : payload.say;
 
     /* The last step has nothing to point at. It announces, and the caption
-       STAYS -- no auto-clear, because the PNR is the thing the user needs. */
+       STAYS -- no auto-clear, because the PNR is what the user needs. */
     if (payload.final) {
       hideRing();
-      announce('✅ ' + payload.say, DAARI_T(S.ui.finished, lang), 'done', lang);
+      announce('✅ ' + say, DAARI_T(S.ui.finished, lang), 'done', lang);
       return;
     }
 
-    var list = serializePage();
-    var index = resolveByName(list, payload.look_for);
+    /* THE CONFIRM GATE. The worker has already refused to send an index, so
+       there is nothing here that could be rung even by mistake. */
+    if (payload.gate) {
+      hideRing();
+      announce(say, payload.stepLabel, 'lost', lang);
+      return;
+    }
 
-    if (index === -1) {
-      /* The failure voice from CLAUDE.md, never a confident wrong pointer.
-         The element may simply not have rendered yet, so keep watching for it
-         rather than giving up on a slow page. */
+    /* Nothing to point at: either the model would not commit or no recipe
+       element matched. Say so honestly, and keep watching in case the element
+       simply has not rendered yet on a slow page. */
+    if (payload.index === -1 || payload.index === null || payload.index === undefined) {
+      hideRing();
+      announce(say, payload.stepLabel, 'lost', lang);
+      return;
+    }
+
+    /* Defence in depth. The gate above is the worker's, and it is the one that
+       matters. This is a second, independent check with its own copy of the
+       word list, because a safety rule should not have exactly one guard. */
+    var entry = lastList[payload.index];
+    var name = entry ? entry.data.name : '';
+    if (DAARI_NEEDS_CONFIRM(name) && !payload.confirmed) {
+      console.error('[Daari] refused to highlight an unconfirmed gated element: ' + name);
+      hideRing();
+      announce(DAARI_T(S.ui.confirmBeforePay, lang), DAARI_T(S.ui.checkFirst, lang), 'lost', lang);
+      return;
+    }
+
+    if (!highlight(payload.index)) {
       hideRing();
       announce(DAARI_T(S.ui.notSure, lang), payload.stepLabel, 'lost', lang);
-      waitForElement(payload);
       return;
     }
 
-    var name = list[index].name;
-
-    /* THE CONFIRM GATE.
-
-       Checked here, against the real accessible name of the element we are
-       about to ring, every time -- not against a flag in the flow that
-       somebody might forget to set. See safety.js. */
-    if (DAARI_NEEDS_CONFIRM(name) && !payload.confirmed) {
-      hideRing();
-      announce(DAARI_T(S.ui.confirmBeforePay, lang),
-               DAARI_T(S.ui.checkFirst, lang), 'lost', lang);
-      send({ type: 'DAARI_NEEDS_CONFIRM' });
-      return;   /* no ring until the user says they have looked */
-    }
-
-    highlight(index);
     /* A notice ("you went back") is said BEFORE the instruction, in the same
-       breath, so the user understands why the ring moved backwards rather
-       than thinking Daari lost its place. */
-    announce(payload.notice ? payload.notice + ' ' + payload.say : payload.say,
-             payload.stepLabel, '', lang);
+       breath, so the ring moving backwards reads as understanding rather than
+       as Daari losing its place. */
+    announce(say, payload.stepLabel, '', lang);
 
-    stopWatching = watchForDone(payload.done_when, index, function () {
-      ask({ type: 'DAARI_STEP_DONE', url: location.href }).then(function (next) {
+    stopWatching = watchForDone(payload.done_when, payload.index, function () {
+      requestStep('DAARI_STEP_DONE').then(function (next) {
         if (next && next.active) { runStep(next); }
       });
     });
   }
 
-  /* The element we need is not here yet. Watch the page and try again when
-     something changes. Cleared when the step changes or guidance stops. */
-  function waitForElement(payload) {
-    var pending = false;
-    retryObserver = new MutationObserver(function () {
-      if (pending) { return; }
-      pending = true;
-      window.setTimeout(function () {
-        pending = false;
-        if (currentStepPayload !== payload) { return; }
-        var list = serializePage();
-        if (resolveByName(list, payload.look_for) !== -1) {
-          runStep(payload);
-        }
-      }, 250);
-    });
-    retryObserver.observe(document.documentElement, { childList: true, subtree: true });
-  }
-
   /* =================================================================
      Starting up on every page load
 
-     This is what makes a flow survive navigation: the page does not remember
-     anything, it just asks. The worker knows whether there is a session, and
-     works out whether the navigation itself completed the last step.
+     This is what makes a flow survive navigation: the page remembers nothing,
+     it just asks. The worker knows whether there is a session, and works out
+     whether the navigation itself completed the last step.
      ================================================================= */
 
   function reportIn() {
-    ask({ type: 'DAARI_PAGE_READY', url: location.href }).then(function (payload) {
+    requestStep('DAARI_PAGE_READY').then(function (payload) {
       if (payload && payload.active) { runStep(payload); }
     });
   }
@@ -753,6 +732,14 @@
        after the user has confirmed a dangerous step. */
     if (message.type === 'DAARI_RUN_STEP') {
       runStep(message.step);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    /* The user pressed "I have checked". Report in again with fresh elements
+       rather than the worker keeping a stale copy of the page. */
+    if (message.type === 'DAARI_ASK_AGAIN') {
+      reportIn();
       sendResponse({ ok: true });
       return;
     }

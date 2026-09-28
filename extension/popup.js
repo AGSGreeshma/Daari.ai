@@ -19,7 +19,7 @@ const result = document.getElementById('result');
 const urlLine = document.getElementById('url');
 
 // Read the API address from config.js, and build the full address to call.
-const apiBase = window.DAARI_CONFIG.API_BASE;
+const apiBase = DAARI_CONFIG.API_BASE;
 const helloUrl = apiBase + '/api/hello';
 
 // Always show which address we are testing. Most "it doesn't work" moments
