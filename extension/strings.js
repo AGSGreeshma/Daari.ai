@@ -10,10 +10,14 @@
    translation reads awkwardly to you, change it here and nothing else needs
    to move.
 
-   Style rules for anything added here:
-   - Say what to DO, not what the thing is called. "Tap this box, a list will
-     open" beats "Class dropdown".
-   - Short sentences. These are spoken aloud to someone who may be nervous.
+   Style rules for anything added here (set by the project owner, a Telugu
+   speaker, after reviewing the first draft):
+   - Use "here" -- ఇక్కడ / यहाँ -- so the sentence points at the ringed box.
+   - Use the everyday loan words people actually say: స్టేషన్, టికెట్, బటన్ /
+     स्टेशन, टिकट, बटन. Not the formal Sanskritised equivalents.
+   - ONE action per sentence.
+   - As short as possible. Shorter than feels comfortable in English.
+   - Say what to DO, not what the thing is called.
    - Never blame the user. */
 
 window.DAARI_STRINGS = {
@@ -34,8 +38,8 @@ window.DAARI_STRINGS = {
   demoSay: [
     {
       en: 'Type where you are starting from',
-      hi: 'आप कहाँ से चल रहे हैं, वह लिखिए',
-      te: 'మీరు ఎక్కడ నుండి బయలుదేరుతున్నారో టైప్ చేయండి'
+      hi: 'यहाँ अपना शुरुआती स्टेशन लिखिए',
+      te: 'మీరు ఏ స్టేషన్ నుండి బయలుదేరుతున్నారో ఇక్కడ టైప్ చేయండి'
     },
     {
       en: 'Now type where you are going',
