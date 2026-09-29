@@ -69,6 +69,47 @@ self.DAARI_STRINGS = {
       te: 'మీరు ముందుకు వచ్చారు - ఇక్కడ నుండి కొనసాగిద్దాం.'
     },
 
+    /* Said after a step finishes, before the next instruction, with about a
+       second of quiet either side. Real testing said the steps "rush ahead while
+       I am still typing" -- this is the pause made audible, so finishing a step
+       feels acknowledged rather than overtaken. */
+    good: {
+      en: 'Good',
+      hi: 'बढ़िया',
+      te: 'బాగుంది'
+    },
+
+    /* An autocomplete list is open. Typing is not enough -- a suggestion has to
+       be chosen, or the site will not accept the station. */
+    pickFromList: {
+      en: 'Now pick your station from the list',
+      hi: 'अब सूची से अपना स्टेशन चुनिए',
+      te: 'ఇప్పుడు లిస్ట్ నుండి మీ స్టేషన్ ఎంచుకోండి'
+    },
+
+    /* A box that already had something in it -- IRCTC filling From from your
+       location, for instance. Daari does NOT skip past it, and does NOT read the
+       value out. It asks the user to look. */
+    prefilledCheck: {
+      en: 'This box already has something in it. Check it is right - change it if not, then tap Done.',
+      hi: 'इस बॉक्स में पहले से कुछ लिखा है। देख लीजिए कि सही है - न हो तो बदलिए, फिर Done दबाइए।',
+      te: 'ఈ బాక్స్‌లో ఇప్పటికే ఏదో ఉంది. సరిగ్గా ఉందో చూడండి - కాకపోతే మార్చండి, తర్వాత Done నొక్కండి.'
+    },
+
+    /* Always visible while guiding, because automatic detection will sometimes
+       miss and the user must never be stuck. */
+    manualDone: {
+      en: 'Done - next step',
+      hi: 'हो गया - आगे',
+      te: 'అయింది - తర్వాత'
+    },
+
+    goBackStep: {
+      en: 'Go back a step',
+      hi: 'एक कदम पीछे',
+      te: 'ఒక అడుగు వెనక్కి'
+    },
+
     notGuiding: {
       en: 'Not guiding right now',
       hi: 'अभी मदद नहीं चल रही',
@@ -130,6 +171,53 @@ self.DAARI_STRINGS = {
       en: 'Speak your goal',
       hi: 'अपना काम बोलिए',
       te: 'మీ పని చెప్పండి'
+    },
+
+    /* The mic no longer stops when you pause. Tap to speak, tap to send -- so
+       the button says what tapping it will DO, not what Daari is doing. */
+    micSend: {
+      en: 'Tap to send',
+      hi: 'भेजने के लिए दबाइए',
+      te: 'పంపడానికి నొక్కండి'
+    },
+
+    micCancel: {
+      en: 'Cancel',
+      hi: 'रद्द',
+      te: 'రద్దు'
+    },
+
+    /* Said under the button while listening. "Take your time" is the whole point
+       of the change: the old mic cut people off mid-sentence. */
+    micListeningHint: {
+      en: 'I am listening. Take your time.',
+      hi: 'मैं सुन रहा हूँ। जल्दी नहीं है।',
+      te: 'నేను వింటున్నాను. తొందర లేదు.'
+    },
+
+    micSilence: {
+      en: 'I heard nothing for a while, so I stopped. Tap to try again.',
+      hi: 'कुछ देर कुछ सुनाई नहीं दिया, इसलिए मैंने रोक दिया। फिर दबाइए।',
+      te: 'కొంతసేపు ఏమీ వినిపించలేదు, ఆపేశాను. మళ్ళీ నొక్కండి.'
+    },
+
+    /* The check before anything happens: a misheard word can be typed over. */
+    confirmHeading: {
+      en: 'Is this right?',
+      hi: 'क्या यह सही है?',
+      te: 'ఇది సరిగ్గా ఉందా?'
+    },
+
+    confirmSend: {
+      en: 'Yes, go',
+      hi: 'हाँ, चलिए',
+      te: 'అవును, వెళ్ళండి'
+    },
+
+    confirmAgain: {
+      en: 'Speak again',
+      hi: 'फिर बोलिए',
+      te: 'మళ్ళీ మాట్లాడండి'
     },
 
     micListening: {

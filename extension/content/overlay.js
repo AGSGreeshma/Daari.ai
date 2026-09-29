@@ -422,7 +422,7 @@
 
      Note how "clicked" works: we LISTEN for the user's own click, in the
      capture phase, and never call preventDefault. Daari produces no clicks. */
-  function watchForDone(rule, defaultIndex, onDone) {
+  function watchForDone(rule, defaultIndex, onDone, onHint) {
     var raw = String(rule || '');
     var colon = raw.indexOf(':');
     var kind = colon === -1 ? raw : raw.slice(0, colon);
@@ -442,16 +442,137 @@
       el = lastList[index] ? lastList[index].el : null;
     }
 
-    function finish() {
+    function finish(why) {
       if (finished) { return; }
       finished = true;
       stop();
-      onDone();
+      onDone(why || kind);
     }
 
     function onClick(event) {
       if (!el) { return; }
       if (event.target === el || el.contains(event.target)) { finish(); }
+    }
+
+    /* ---- field_filled, the calm version ----------------------------------
+
+       It used to finish on the first keystroke, which is why real testing said
+       the steps "rush ahead while I am still typing a station name". Typing one
+       letter of "Secunderabad" is not finishing the step.
+
+       A text box now counts as done only when it is non-empty AND one of:
+         - the user leaves the box (blur)
+         - the user presses Enter
+         - the user stops typing for 2.5 seconds
+
+       ...which is the difference between a guide that waits and one that races. */
+    var SETTLE_MS = 2500;
+    var settleTimer = null;
+    var hasTyped = false;
+
+    function cancelSettle() {
+      if (settleTimer !== null) { window.clearTimeout(settleTimer); settleTimer = null; }
+    }
+
+    /* A box that ALREADY had something in it when the step began is not the same
+       thing as one the user just filled -- IRCTC pre-fills From from your
+       location. Daari must not skip it, and must not read it out either. It asks
+       the user to look, and then waits for them to change it and settle, or to
+       press Done. */
+    var startedFilled = !!(el && isFilled(el));
+
+    function settleNow(why) {
+      cancelSettle();
+      if (!el || !isFilled(el)) { return; }
+      /* An open suggestion list means the site has not accepted this yet, so
+         leaving the box or pausing does not finish the step. */
+      if (listIsOpen(el)) { return; }
+      /* A pre-filled box needs the user to have actually done something. */
+      if (startedFilled && !hasTyped) { return; }
+      finish(why);
+    }
+
+    function onTyping() {
+      hasTyped = true;
+      cancelSettle();
+      if (!el || !isFilled(el)) { return; }
+      settleTimer = window.setTimeout(function () {
+        settleTimer = null;
+        settleNow('stopped typing');
+      }, SETTLE_MS);
+    }
+
+    function onLeave() { settleNow('left the box'); }
+
+    /* ---- autocomplete -----------------------------------------------------
+
+       On a real booking site the station box is almost always an autocomplete.
+       Typing "Secunderabad" into it and moving on does not work: the site wants a
+       suggestion CHOSEN from its list, and silently rejects anything else. So the
+       step has to wait for the list to open and then close again.
+
+       Detection is by the ARIA attributes such widgets carry. Nothing here
+       depends on a particular site's markup. */
+    function looksLikeAutocomplete(element) {
+      if (!element || !element.getAttribute) { return false; }
+      var role = (element.getAttribute('role') || '').toLowerCase();
+      return role === 'combobox' ||
+             element.hasAttribute('aria-autocomplete') ||
+             element.hasAttribute('aria-expanded') ||
+             element.hasAttribute('aria-controls') ||
+             element.hasAttribute('aria-owns');
+    }
+
+    /* Is its list open right now? */
+    function listIsOpen(element) {
+      if (!element || !element.getAttribute) { return false; }
+      if ((element.getAttribute('aria-expanded') || '') === 'true') { return true; }
+
+      var id = element.getAttribute('aria-controls') || element.getAttribute('aria-owns');
+      if (id) {
+        var list = document.getElementById(id);
+        if (list) {
+          var box = list.getBoundingClientRect();
+          if (box.width > 1 && box.height > 1) { return true; }
+        }
+      }
+      /* Some widgets carry no link at all between box and list, so fall back to
+         "is any suggestion visible anywhere". */
+      var option = document.querySelector('[role="option"]');
+      if (option) {
+        var optionBox = option.getBoundingClientRect();
+        if (optionBox.width > 1 && optionBox.height > 1) { return true; }
+      }
+      return false;
+    }
+
+    var listHasOpened = false;
+    var hintedAboutList = false;
+    var listTimer = null;
+
+    function recheckList() {
+      if (listTimer !== null) { return; }
+      listTimer = window.setTimeout(function () {
+        listTimer = null;
+        if (finished || !el) { return; }
+
+        if (listIsOpen(el)) {
+          listHasOpened = true;
+          cancelSettle();            /* never finish while the list is open */
+          if (!hintedAboutList && onHint) {
+            hintedAboutList = true;
+            onHint('pickFromList');
+          }
+        } else if (listHasOpened && hasTyped && isFilled(el)) {
+          /* It opened, and now it has closed with something in the box: a
+             suggestion was chosen. */
+          finish('picked from the list');
+        }
+      }, 150);
+    }
+
+    function onKey(event) {
+      if (event.key === 'Enter') { settleNow('pressed Enter'); }
     }
 
     function onInput() {
@@ -496,25 +617,43 @@
         el.removeEventListener('input', onInput);
         el.removeEventListener('change', onInput);
         el.removeEventListener('blur', onInput);
+        el.removeEventListener('input', onTyping);
+        el.removeEventListener('change', onTyping);
+        el.removeEventListener('blur', onLeave);
+        el.removeEventListener('keydown', onKey);
         el.removeEventListener('change', onChanged);
         el.removeEventListener('blur', onChanged);
       }
       if (observer) { observer.disconnect(); observer = null; }
       if (recheckTimer !== null) { window.clearTimeout(recheckTimer); recheckTimer = null; }
+      cancelSettle();
+      if (listTimer !== null) { window.clearTimeout(listTimer); listTimer = null; }
     }
 
     if (kind === 'clicked') {
       document.addEventListener('click', onClick, true);
 
     } else if (kind === 'field_filled') {
-      if (el && isFilled(el)) {
-        /* Already done before we began watching. Deferred by a tick so the
-           caller has finished wiring up before onDone fires. */
-        window.setTimeout(finish, 0);
-      } else if (el) {
-        el.addEventListener('input', onInput);
-        el.addEventListener('change', onInput);
-        el.addEventListener('blur', onInput);
+      if (el) {
+        el.addEventListener('input', onTyping);
+        el.addEventListener('change', onTyping);
+        el.addEventListener('blur', onLeave);
+        el.addEventListener('keydown', onKey);
+
+        /* A station box on a real site is usually an autocomplete: typing is not
+           enough, a suggestion has to be chosen or the site rejects it. Watch the
+           list so the step waits for the choice. */
+        if (looksLikeAutocomplete(el)) {
+          observer = new MutationObserver(recheckList);
+          observer.observe(document.documentElement, {
+            subtree: true, childList: true, attributes: true,
+            attributeFilter: ['aria-expanded', 'aria-activedescendant', 'style', 'class', 'hidden']
+          });
+          recheckList();
+        }
+
+        /* Pre-filled, so ask them to look rather than sailing past it. */
+        if (startedFilled && onHint) { onHint('prefilledCheck'); }
       }
 
     } else if (kind === 'value_changed') {
@@ -581,6 +720,7 @@
   }
 
   function stopEverything() {
+    clearAdvanceTimers();
     if (stopWatching) { stopWatching(); stopWatching = null; }
     if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
     currentStepPayload = null;
@@ -700,11 +840,48 @@
        as Daari losing its place. */
     announce(say, payload.stepLabel, '', lang);
 
-    stopWatching = watchForDone(payload.done_when, payload.index, function () {
-      requestStep('DAARI_STEP_DONE').then(function (next) {
-        if (next && next.active) { runStep(next); }
+    stopWatching = watchForDone(payload.done_when, payload.index,
+      function () { advance(lang, 1000); },
+      /* The hint channel: a step can say something extra -- "pick from the list",
+         "this box already has something in it" -- without that counting as a new
+         step or moving the ring. */
+      function (key) {
+        if (!S.ui[key]) { return; }
+        announce(DAARI_T(S.ui[key], lang), payload.stepLabel, '', lang);
       });
-    });
+  }
+
+  /* Finish a step calmly.
+
+     Real testing said the steps "rush ahead while I am still typing". So: a beat
+     of quiet, a gentle "Good", another beat, and only then the next instruction.
+     The acknowledgement is not decoration -- it is what makes finishing a step
+     feel noticed rather than overtaken. The panel plays speech through a queue,
+     so the next instruction can never cut "Good" off mid-word.
+
+     pauseMs is 0 when the user pressed Done themselves: they know they finished,
+     so there is nothing to wait for. */
+  var advanceTimers = [];
+
+  function clearAdvanceTimers() {
+    advanceTimers.forEach(function (id) { window.clearTimeout(id); });
+    advanceTimers = [];
+  }
+
+  function advance(lang, pauseMs) {
+    clearAdvanceTimers();
+    if (stopWatching) { stopWatching(); stopWatching = null; }
+
+    advanceTimers.push(window.setTimeout(function () {
+      hideRing();
+      announce(DAARI_T(DAARI_STRINGS.ui.good, lang), '', 'done', lang);
+
+      advanceTimers.push(window.setTimeout(function () {
+        requestStep('DAARI_STEP_DONE').then(function (next) {
+          if (next && next.active) { runStep(next); }
+        });
+      }, 700));
+    }, pauseMs));
   }
 
   /* =================================================================
@@ -740,6 +917,26 @@
        after the user has confirmed a dangerous step. */
     if (message.type === 'DAARI_RUN_STEP') {
       runStep(message.step);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    /* The user pressed "Done - next step". Automatic detection will sometimes
+       miss, and they must never be stuck. The watcher is stopped first, or it
+       could fire too and advance twice. */
+    if (message.type === 'DAARI_MANUAL_DONE') {
+      var lang = (currentStepPayload && currentStepPayload.lang) || 'te';
+      advance(lang, 0);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === 'DAARI_MANUAL_BACK') {
+      clearAdvanceTimers();
+      if (stopWatching) { stopWatching(); stopWatching = null; }
+      requestStep('DAARI_STEP_BACK').then(function (previous) {
+        if (previous && previous.active) { runStep(previous); }
+      });
       sendResponse({ ok: true });
       return;
     }
@@ -845,6 +1042,10 @@
       highlight: expose('highlight', highlight),
       showCaption: expose('showCaption', showCaption),
       clearAll: expose('clearAll', clearAll),
+      /* For tests: the pacing rules are behavioural and cannot be checked any
+         other way without a browser. */
+      watchForDone: expose('watchForDone', watchForDone),
+      serializeOne: expose('serializeOne', function (i) { return lastList[i] || null; }),
       version: '0.7'
     };
   } catch (error) {

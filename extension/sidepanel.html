@@ -17,11 +17,24 @@
   </div>
 
   <button class="mic" id="mic">Speak your goal</button>
+  <p class="mic-hint" id="micHint"></p>
+  <button class="mic-cancel" id="micCancel">Cancel</button>
 
   <div class="transcript" id="transcript">
     <span class="placeholder" id="placeholder">
       What do you want to do? Tap the button above and say it.
     </span>
+  </div>
+
+  <!-- The check before anything happens. A misheard word can be typed over
+       rather than the whole thing said again. -->
+  <div class="confirm-box" id="confirmBox">
+    <p class="confirm-heading" id="confirmHeading">Is this right?</p>
+    <textarea id="confirmText" rows="2" aria-label="What Daari heard"></textarea>
+    <div class="confirm-actions">
+      <button id="confirmSend">Yes, go</button>
+      <button id="confirmAgain" class="ghost">Speak again</button>
+    </div>
   </div>
 
   <div class="goal" id="goal"></div>
@@ -42,6 +55,11 @@
   <!-- The confirm gate. Hidden until Daari refuses to point at something
        until the user has looked at the screen. -->
   <button class="confirm" id="confirm">I have checked - continue</button>
+
+  <!-- Always visible while guiding. Automatic detection will sometimes miss, and
+       the user must never be stuck with no way forward or back. -->
+  <button class="done-next" id="manualDone">Done - next step</button>
+  <button class="back-step" id="manualBack">Go back a step</button>
 
   <div class="controls">
     <button id="repeat">&#128257; Repeat</button>

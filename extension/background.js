@@ -727,6 +727,27 @@ var HANDLERS = {
     return payload;
   },
 
+  /* "Go back a step". Exactly one step, and never past the beginning.
+
+     Automatic detection is good but not perfect, and a user who cannot go back is
+     a user who has to start the whole booking again. Going back also clears any
+     confirmation they had given, because that answer was about the step they are
+     leaving. */
+  DAARI_STEP_BACK: async function (message) {
+    var session = await getSession();
+    if (!session) { return { active: false }; }
+
+    if (session.stepIndex > 0) { session.stepIndex -= 1; }
+    session.confirmedStep = null;
+    session.awaitingConfirm = null;
+    session.finished = false;
+    if (session.history.length) { session.history.pop(); }
+
+    var payload = await decideStep(session, message);
+    await saveSession(session);
+    return payload;
+  },
+
   /* The user pressed "I have checked". The page is asked to report in again
      with fresh elements, rather than the worker keeping a copy of the page. */
   DAARI_CONFIRMED: async function () {

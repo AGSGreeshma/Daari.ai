@@ -24,7 +24,6 @@
   var lang = 'te';
 
   var recognition = null;
-  var listening = false;
   var voices = [];
   var lastSpoken = null;   /* { text, lang } -- what Repeat says again */
   var audioCtx = null;
@@ -46,7 +45,16 @@
     startDemo: document.getElementById('startDemo'),
     stopGuidance: document.getElementById('stopGuidance'),
     voiceStatus: document.getElementById('voiceStatus'),
-    devBody: document.getElementById('devBody')
+    devBody: document.getElementById('devBody'),
+    micHint: document.getElementById('micHint'),
+    micCancel: document.getElementById('micCancel'),
+    confirmBox: document.getElementById('confirmBox'),
+    confirmHeading: document.getElementById('confirmHeading'),
+    confirmText: document.getElementById('confirmText'),
+    confirmSend: document.getElementById('confirmSend'),
+    confirmAgain: document.getElementById('confirmAgain'),
+    manualDone: document.getElementById('manualDone'),
+    manualBack: document.getElementById('manualBack')
   };
 
   /* The recipe "Start demo" forces, for when you want the booking walk without
@@ -71,6 +79,17 @@
   function clearMessage() {
     el.message.className = 'msg';
     el.message.textContent = '';
+  }
+
+  /* Send something to the overlay in the current tab. */
+  async function tellPage(message) {
+    try {
+      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]) { await chrome.tabs.sendMessage(tabs[0].id, message); }
+    } catch (e) {
+      showMessage('bad',
+        'That page is not listening. Reload it (F5) and try again.');
+    }
   }
 
   function openPermissionPage() {
@@ -106,7 +125,7 @@
 
     /* If the user switches language mid-sentence, the old recogniser is
        listening for the wrong language. Stop it. */
-    if (listening) { stopListening(); }
+    if (micState === 'listening') { cancelListening(); }
 
     applyLanguage();
     describeVoices();
@@ -119,7 +138,13 @@
       buttons[i].className = 'lang' + (buttons[i].dataset.code === lang ? ' on' : '');
     }
 
-    el.mic.textContent = T(listening ? S.ui.micListening : S.ui.micIdle, lang);
+    el.mic.textContent = T(micState === 'listening' ? S.ui.micSend : S.ui.micIdle, lang);
+    el.micCancel.textContent = T(S.ui.micCancel, lang);
+    el.confirmHeading.textContent = T(S.ui.confirmHeading, lang);
+    el.confirmSend.textContent = T(S.ui.confirmSend, lang);
+    el.confirmAgain.textContent = T(S.ui.confirmAgain, lang);
+    el.manualDone.textContent = T(S.ui.manualDone, lang);
+    el.manualBack.textContent = T(S.ui.goBackStep, lang);
     el.mic.setAttribute('lang', lang);
 
     if (el.placeholder) {
@@ -149,6 +174,8 @@
       el.counter.textContent = '';
       el.confirm.style.display = 'none';
       el.stopGuidance.style.display = 'none';
+      el.manualDone.style.display = 'none';
+      el.manualBack.style.display = 'none';
       el.devBody.textContent = 'Nothing running.';
       return;
     }
@@ -163,6 +190,12 @@
 
     el.stopGuidance.style.display = 'block';
     el.confirm.style.display = status.awaitingConfirm ? 'block' : 'none';
+    /* Hidden while a confirm gate is up: the only thing to press there is "I have
+       checked", and offering "Done - next step" beside it would let somebody skip
+       the very stop that exists to slow them down. */
+    var guiding = !status.awaitingConfirm && !status.finished;
+    el.manualDone.style.display = guiding ? 'block' : 'none';
+    el.manualBack.style.display = guiding ? 'block' : 'none';
 
     showDeveloperDetails(status);
   }
@@ -272,13 +305,44 @@
      Never a wrong-language voice. A Hindi voice reading Telugu mispronounces
      badly enough to be worse than saying nothing, and for the primary persona
      that would undermine the whole thing. */
+  /* Speech is QUEUED, not interrupted.
+
+     "After any step completes: a pause, a gentle Good, then the next
+     instruction" only works if the next instruction waits its turn. Cancelling
+     the previous utterance would clip the acknowledgement to "Goo-" and make the
+     pacing worse than having none. Stop speaking still clears the queue, because
+     that is the user asking for silence. */
+  var speechQueue = [];
+  var speaking = false;
+
+  function drainQueue() {
+    if (speaking || !speechQueue.length) { return; }
+    var next = speechQueue.shift();
+    speaking = true;
+    sayNow(next.text, next.lang, function () {
+      speaking = false;
+      drainQueue();
+    });
+  }
+
   function speak(text, code) {
     if (!text) { return; }
-
     lastSpoken = { text: text, lang: code };
+    speechQueue.push({ text: text, lang: code });
+    /* Two queued is plenty -- an acknowledgement and an instruction. More than
+       that means the user has got ahead of us and the old ones are stale. */
+    while (speechQueue.length > 2) { speechQueue.shift(); }
+    drainQueue();
+  }
+
+  function silence() {
+    speechQueue = [];
+    speaking = false;
     DAARI_TTS.stop();
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
+  }
 
+  function sayNow(text, code, whenDone) {
     var voice = pickVoice(code);
 
     if (voice && window.speechSynthesis) {
@@ -289,6 +353,9 @@
          instruction for the first time. */
       utterance.rate = 0.8;
       utterance.pitch = 1;
+      utterance.onend = whenDone;
+      /* If the voice never reports back -- it happens -- do not wedge the queue. */
+      utterance.onerror = whenDone;
       window.speechSynthesis.speak(utterance);
       return;
     }
@@ -306,9 +373,15 @@
       window.setTimeout(function () {
         DAARI_TTS.speak(text, code).then(function (spoke) {
           if (!spoke) { describeVoices(); }   /* say why, honestly */
+          whenDone();
         });
       }, 380);
+      return;
     }
+
+    /* Captions only: nothing to wait for, so release the queue after a beat long
+       enough to read a short line. */
+    window.setTimeout(whenDone, 900);
   }
 
   /* Tell the user honestly what Windows can and cannot say. */
@@ -340,9 +413,45 @@
 
   /* =================================================================
      EARS -- listening
+
+     TAP TO SPEAK, TAP TO SEND.
+
+     The old mic used continuous:false, so Chrome ended the session at the first
+     pause and real testing said it "stops listening before I finish my
+     sentence". Someone thinking about which station they want pauses constantly.
+
+     So now: continuous recognition, and when Chrome ends the session anyway --
+     which it still does, on a network hiccup or a long silence -- we start it
+     again silently and keep everything heard so far. Nothing is sent until the
+     user taps send, and even then they get a chance to fix a misheard word by
+     typing over it.
+
+     Three states, and the button always says what tapping it will DO:
+       idle       "Speak your goal"
+       listening  "Tap to send"   (+ a quiet Cancel)
+       confirming the editable box, "Is this right?"
      ================================================================= */
 
   var SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  /* Stop after this long with nothing heard at all, keeping what we have. A
+     safety net so a forgotten open mic does not listen indefinitely. */
+  var TOTAL_SILENCE_MS = 30000;
+
+  var micState = 'idle';          /* idle | listening | confirming */
+  var heard = '';                 /* everything finalised so far, across restarts */
+  var silenceTimer = null;
+  var restarts = 0;
+
+  function setMicState(state) {
+    micState = state;
+    el.mic.className = 'mic' + (state === 'listening' ? ' sending' : '');
+    el.micCancel.style.display = state === 'listening' ? 'block' : 'none';
+    el.confirmBox.style.display = state === 'confirming' ? 'block' : 'none';
+    el.micHint.textContent = state === 'listening' ? T(S.ui.micListeningHint, lang) : '';
+    el.mic.disabled = state === 'confirming';
+    applyLanguage();
+  }
 
   function setTranscript(text, isFinal) {
     el.transcript.className = 'transcript ' + (isFinal ? 'final' : 'interim');
@@ -350,83 +459,112 @@
     el.transcript.setAttribute('lang', lang);
   }
 
-  function acceptGoal(text) {
-    var trimmed = String(text || '').trim();
-    if (!trimmed) { return; }
-    setTranscript(trimmed, true);
-    el.goal.textContent = '';
-    var cap = document.createElement('span');
-    cap.className = 'cap';
-    cap.textContent = T(S.ui.yourGoal, lang);
-    var words = document.createElement('span');
-    words.textContent = trimmed;
-    el.goal.appendChild(cap);
-    el.goal.appendChild(words);
-    el.goal.style.display = 'block';
-    el.goal.setAttribute('lang', lang);
-
-    /* Saying what you want IS the instruction. One action for the user: speak,
-       and the first ring appears. Stop guidance is right there if Daari
-       mis-heard. */
-    startFlow(trimmed, null);
+  function armSilenceTimer() {
+    if (silenceTimer !== null) { window.clearTimeout(silenceTimer); }
+    silenceTimer = window.setTimeout(function () {
+      silenceTimer = null;
+      if (micState !== 'listening') { return; }
+      /* Keep whatever was heard -- throwing it away would be the rudest possible
+         end to a long sentence. */
+      if (heard.trim()) {
+        finishListening();
+      } else {
+        cancelListening();
+        showMessage('info', T(S.ui.micSilence, lang));
+      }
+    }, TOTAL_SILENCE_MS);
   }
 
-  /* Begin guiding. The worker matches the goal to a recipe, or decides there is
-     none and lets the model work alone. */
-  async function startFlow(goal, forcedFlowId) {
-    clearMessage();
+  function stopRecogniser() {
+    if (!recognition) { return; }
+    /* Detach first, or onend will helpfully restart the thing we are stopping. */
+    recognition.onend = null;
+    recognition.onerror = null;
+    recognition.onresult = null;
+    try { recognition.stop(); } catch (e) { /* already stopping */ }
+    recognition = null;
+  }
+
+  function startRecogniser() {
+    if (!SpeechRecognitionClass) { return false; }
+
     try {
-      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      var tab = tabs[0];
-      if (!tab) { throw new Error('No page is open.'); }
+      recognition = new SpeechRecognitionClass();
+    } catch (e) {
+      showMessage('bad', 'Could not start listening: ' + e.message + '. Please type instead.');
+      return false;
+    }
 
-      var reply = await chrome.runtime.sendMessage({
-        type: 'DAARI_START_FLOW',
-        goal: goal,
-        flowId: forcedFlowId || undefined,
-        tabId: tab.id,
-        /* The worker needs the address, not just the tab: a recipe only runs on
-           its own site, and it checks that before anything else. */
-        url: tab.url || ''
-      });
+    recognition.lang = speechCodeFor(lang);
+    recognition.interimResults = true;
+    recognition.continuous = true;      /* do NOT stop at a pause */
+    recognition.maxAlternatives = 1;
 
-      /* Asking for a specific recipe on the wrong site is refused outright, and
-         no session is created. Say so plainly rather than starting something
-         that would then claim "Step 3 of 15" about a page it does not know. */
-      if (reply && reply.wrongSite) {
+    recognition.onresult = function (event) {
+      var interim = '';
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var result = event.results[i];
+        if (result.isFinal) { heard += result[0].transcript; }
+        else { interim += result[0].transcript; }
+      }
+      /* Anything at all counts as not-silence. */
+      armSilenceTimer();
+      setTranscript((heard + ' ' + interim).trim() || '...', false);
+    };
+
+    recognition.onerror = function (event) {
+      var code = event.error;
+
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        cancelListening();
         showMessage('bad',
-          'That demo only runs on the practice site.\n\n' +
-          reply.reason + '\n\n' +
-          'Open the practice site to run the demo, or just say what you want to do ' +
-          'here and I will read this page myself.');
+          'Chrome has not given Daari permission to use the microphone.\n\n' +
+          'This takes one click and you only do it once.',
+          'Allow microphone', openPermissionPage);
         return;
       }
-
-      /* The session exists now, so ask the page to report in with what it can
-         see. Everything after this is the worker's decision. */
-      await chrome.tabs.sendMessage(tab.id, { type: 'DAARI_ASK_AGAIN' });
-      refreshStatus();
-
-      if (reply && reply.aiOnly) {
-        showMessage('info',
-          'I have no saved route for this site, so I will read the page myself. ' +
-          'I will tell you if I am unsure rather than guessing.');
+      if (code === 'language-not-supported') {
+        cancelListening();
+        showMessage('bad',
+          'Chrome cannot recognise ' + speechCodeFor(lang) + ' speech on this computer.\n\n' +
+          'Please type your goal in the box instead. Tell Claude this happened -- it is ' +
+          'worth knowing before the demo.');
+        return;
       }
-    } catch (e) {
-      showMessage('bad',
-        'Could not start on that page.\n\n' +
-        'If the page was already open when the extension was reloaded, reload the ' +
-        'page (F5) and try again.\n\nDetails: ' + e.message);
-    }
-  }
+      if (code === 'network') {
+        cancelListening();
+        showMessage('bad',
+          'Speech recognition needs the internet, and the connection failed. ' +
+          'Check your connection, or type your goal instead.');
+        return;
+      }
+      /* "no-speech" and "aborted" are NOT failures here. They are what a thinking
+         pause looks like from Chrome's side, and onend will restart us. */
+    };
 
-  function stopListening() {
-    if (recognition) {
-      try { recognition.stop(); } catch (e) { /* already stopping */ }
+    recognition.onend = function () {
+      /* Chrome ended the session on its own. If the user has not tapped send or
+         cancel, that was not their decision, so start again and say nothing. */
+      if (micState !== 'listening') { return; }
+
+      restarts += 1;
+      if (restarts > 60) {
+        /* Something is wrong at a level we cannot fix by trying harder. */
+        finishListening();
+        return;
+      }
+      window.setTimeout(function () {
+        if (micState === 'listening') { startRecogniser(); }
+      }, 150);
+    };
+
+    try {
+      recognition.start();
+      return true;
+    } catch (e) {
+      /* Already started is harmless; anything else is not worth a restart loop. */
+      return true;
     }
-    listening = false;
-    el.mic.className = 'mic';
-    applyLanguage();
   }
 
   function startListening() {
@@ -438,73 +576,43 @@
     }
 
     clearMessage();
+    heard = '';
+    restarts = 0;
+    setMicState('listening');
+    setTranscript('...', false);
+    armSilenceTimer();
 
-    try {
-      recognition = new SpeechRecognitionClass();
-    } catch (e) {
-      showMessage('bad', 'Could not start listening: ' + e.message + '. Please type instead.');
+    if (!startRecogniser()) { setMicState('idle'); }
+  }
+
+  /* The user tapped send. Stop, and show what we heard for checking. */
+  function finishListening() {
+    if (silenceTimer !== null) { window.clearTimeout(silenceTimer); silenceTimer = null; }
+    stopRecogniser();
+
+    var text = heard.trim();
+    if (!text) {
+      setMicState('idle');
+      showMessage('info', T(S.ui.micSilence, lang));
       return;
     }
 
-    recognition.lang = speechCodeFor(lang);
-    recognition.interimResults = true;   /* so the user sees words appear live */
-    recognition.continuous = false;      /* one sentence, then stop */
-    recognition.maxAlternatives = 1;
+    setMicState('confirming');
+    setTranscript(text, true);
+    el.confirmText.value = text;
+    el.confirmText.setAttribute('lang', lang);
+    el.confirmText.focus();
+  }
 
-    recognition.onresult = function (event) {
-      var interim = '';
-      var final = '';
-      for (var i = event.resultIndex; i < event.results.length; i++) {
-        var result = event.results[i];
-        if (result.isFinal) { final += result[0].transcript; }
-        else { interim += result[0].transcript; }
-      }
-      if (final) { acceptGoal(final); }
-      else if (interim) { setTranscript(interim, false); }
-    };
-
-    recognition.onerror = function (event) {
-      var code = event.error;
-
-      if (code === 'not-allowed' || code === 'service-not-allowed') {
-        showMessage('bad',
-          'Chrome has not given Daari permission to use the microphone.\n\n' +
-          'This takes one click and you only do it once.',
-          'Allow microphone', openPermissionPage);
-
-      } else if (code === 'language-not-supported') {
-        showMessage('bad',
-          'Chrome cannot recognise ' + speechCodeFor(lang) + ' speech on this computer.\n\n' +
-          'Please type your goal in the box instead. Tell Claude this happened -- it is worth ' +
-          'knowing before the demo.');
-
-      } else if (code === 'no-speech') {
-        showMessage('info',
-          'I did not hear anything. Tap the button and speak a little closer to the microphone.');
-
-      } else if (code === 'network') {
-        showMessage('bad',
-          'Speech recognition needs the internet, and the connection failed. ' +
-          'Check your connection, or type your goal instead.');
-
-      } else if (code !== 'aborted') {
-        showMessage('bad', 'Listening stopped (' + code + '). Please try again, or type instead.');
-      }
-
-      stopListening();
-    };
-
-    recognition.onend = function () { stopListening(); };
-
-    try {
-      recognition.start();
-      listening = true;
-      el.mic.className = 'mic listening';
-      applyLanguage();
-      setTranscript('...', false);
-    } catch (e) {
-      showMessage('bad', 'Could not start listening: ' + e.message);
-      stopListening();
+  function cancelListening() {
+    if (silenceTimer !== null) { window.clearTimeout(silenceTimer); silenceTimer = null; }
+    stopRecogniser();
+    heard = '';
+    setMicState('idle');
+    setTranscript('', false);
+    if (el.placeholder) {
+      el.transcript.textContent = '';
+      el.transcript.appendChild(el.placeholder);
     }
   }
 
@@ -545,8 +653,49 @@
      Buttons
      ================================================================= */
 
+  /* One button, two meanings, and it always says which one is live. */
   el.mic.addEventListener('click', function () {
-    if (listening) { stopListening(); } else { startListening(); }
+    if (micState === 'listening') { finishListening(); } else { startListening(); }
+  });
+
+  el.micCancel.addEventListener('click', cancelListening);
+
+  /* Send what is in the box -- typed corrections included.
+
+     A named function rather than a handler, so Enter can call it directly. The
+     obvious shortcut would be to invoke the button's own click method, and that
+     is precisely the call the no-clicking grep hunts for. Keeping that check at
+     ZERO everywhere is worth more than the one line it saves: a rule with no
+     exceptions cannot be misapplied, and "zero" is checkable by anyone in one
+     command. This comment is worded to avoid tripping it too. */
+  function sendConfirmedGoal() {
+    var text = el.confirmText.value.trim();
+    setMicState('idle');
+    if (text) { acceptGoal(text); }
+  }
+
+  el.confirmSend.addEventListener('click', sendConfirmedGoal);
+
+  el.confirmAgain.addEventListener('click', function () {
+    setMicState('idle');
+    startListening();
+  });
+
+  /* Enter sends; Shift+Enter leaves room for a longer correction. */
+  el.confirmText.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendConfirmedGoal();
+    }
+  });
+
+  /* Manual advance, always available while guiding. */
+  el.manualDone.addEventListener('click', function () {
+    tellPage({ type: 'DAARI_MANUAL_DONE' });
+  });
+
+  el.manualBack.addEventListener('click', function () {
+    tellPage({ type: 'DAARI_MANUAL_BACK' });
   });
 
   el.useTyped.addEventListener('click', function () {
@@ -565,10 +714,7 @@
     if (lastSpoken) { speak(lastSpoken.text, lastSpoken.lang); }
   });
 
-  el.stopSpeak.addEventListener('click', function () {
-    if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
-    DAARI_TTS.stop();   /* fetched Telugu audio has to be stopped separately */
-  });
+  el.stopSpeak.addEventListener('click', silence);
 
   /* The manual way in, for when you want the booking walk without speaking.
      Forces the recipe rather than matching a goal. */

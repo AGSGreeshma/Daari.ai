@@ -457,6 +457,272 @@ console.log('\n2e. Matching a goal requires the right site TOO');
   check('coming back restores the recipe', [step.total, step.offSite], [15, false]);
 }
 
+console.log('\n2f. PACING: the step waits for the user');
+{
+  /* These rules are behavioural -- "advances on blur, on Enter, or after 2.5
+     seconds of not typing" cannot be checked by reading the code. So the real
+     watchForDone from overlay.js runs here against a fake DOM and a fake clock.
+
+     It exists because real testing said the steps "rush ahead while I am still
+     typing a station name". Typing one letter of "Secunderabad" is not finishing
+     the step. */
+
+  // ---- a fake clock, so 2.5 seconds costs nothing ------------------------
+  let now = 0;
+  let timers = [];
+  let nextTimerId = 1;
+  const fakeSetTimeout = (fn, ms) => {
+    const id = nextTimerId++;
+    timers.push({ id: id, at: now + (ms || 0), fn: fn });
+    return id;
+  };
+  const fakeClearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
+  function tick(ms) {
+    const until = now + ms;
+    for (;;) {
+      const due = timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at)[0];
+      if (!due) { break; }
+      timers = timers.filter((t) => t !== due);
+      now = due.at;
+      due.fn();
+    }
+    now = until;
+  }
+
+  // ---- a fake element, just enough of one --------------------------------
+  function makeField(attrs) {
+    const listeners = {};
+    return {
+      tagName: 'INPUT',
+      type: 'text',
+      value: (attrs && attrs.value) || '',
+      _attrs: Object.assign({}, attrs && attrs.attrs),
+      addEventListener: function (name, fn) {
+        (listeners[name] = listeners[name] || []).push(fn);
+      },
+      removeEventListener: function (name, fn) {
+        listeners[name] = (listeners[name] || []).filter((f) => f !== fn);
+      },
+      getAttribute: function (n) {
+        return Object.prototype.hasOwnProperty.call(this._attrs, n) ? this._attrs[n] : null;
+      },
+      hasAttribute: function (n) {
+        return Object.prototype.hasOwnProperty.call(this._attrs, n);
+      },
+      getBoundingClientRect: function () { return { width: 120, height: 24, top: 10, left: 10, bottom: 34, right: 130 }; },
+      // test helpers
+      fire: function (name, event) {
+        (listeners[name] || []).slice().forEach((fn) => fn(event || {}));
+      },
+      type_: function (text) { this.value += text; this.fire('input'); }
+    };
+  }
+
+  /* Pull the REAL watchForDone out of overlay.js and run it with everything it
+     touches stubbed. Not a copy of the logic -- the shipped logic. */
+  function makeWatcher(field, opts) {
+    const src = fs.readFileSync(path.join(EXT, 'content', 'overlay.js'), 'utf8');
+    const from = src.indexOf('  function watchForDone(');
+    const to = src.indexOf('  /* ====', from);
+    if (from === -1 || to === -1) { throw new Error('could not find watchForDone'); }
+
+    const listOpen = { value: (opts && opts.listOpen) || false };
+    const optionVisible = { value: false };
+
+    const sandbox = {
+      console: console,
+      String: String, Number: Number, Object: Object, Array: Array, RegExp: RegExp,
+      // the element under test, at index 0
+      lastList: [{ el: field, data: { i: 0, tag: 'input', type: 'text', name: 'From station *', filled: !!field.value } }],
+      isFilled: function (el) { return String(el.value || '').length > 0; },
+      serializePage: function () { return [{ i: 0, name: 'From station *' }]; },
+      DAARI_RESOLVE_BY_NAME: function () { return 0; },
+      visiblePageText: function () { return ''; },
+      window: { setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout },
+      MutationObserver: function (cb) {
+        this.observe = function () { sandbox.__mutate = cb; };
+        this.disconnect = function () { sandbox.__mutate = null; };
+      },
+      document: {
+        documentElement: {},
+        addEventListener: function () {},
+        removeEventListener: function () {},
+        getElementById: function () {
+          return listOpen.value
+            ? { getBoundingClientRect: () => ({ width: 200, height: 100 }) } : null;
+        },
+        querySelector: function () {
+          return optionVisible.value
+            ? { getBoundingClientRect: () => ({ width: 200, height: 20 }) } : null;
+        }
+      }
+    };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(src.slice(from, to) + '\n;this.__watchForDone = watchForDone;', sandbox);
+
+    const done = { count: 0, why: null };
+    const hints = [];
+    const stop = sandbox.__watchForDone('field_filled', 0,
+      function (why) { done.count += 1; done.why = why; },
+      function (key) { hints.push(key); });
+
+    return {
+      done: done, hints: hints, stop: stop,
+      openList: function () { listOpen.value = true; if (sandbox.__mutate) { sandbox.__mutate(); } },
+      closeList: function () { listOpen.value = false; if (sandbox.__mutate) { sandbox.__mutate(); } }
+    };
+  }
+
+  // ---- THE BUG: one keystroke used to finish the step --------------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.type_('S');
+    check('one keystroke does NOT finish the step', w.done.count, 0);
+    field.type_('ecunderabad');
+    tick(1000);
+    check('still not finished a second later', w.done.count, 0);
+    tick(1400);
+    check('still not finished at 2.4s', w.done.count, 0);
+    tick(200);
+    check('finishes after 2.5s of not typing', w.done.count, 1);
+    check('  and says why', w.done.why, 'stopped typing');
+  }
+
+  // ---- typing again restarts the wait -----------------------------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.type_('Sec');
+    tick(2000);
+    field.type_('underabad');          // still going
+    tick(2000);
+    check('typing again restarts the 2.5s wait', w.done.count, 0);
+    tick(600);
+    check('  and it finishes 2.5s after the LAST keystroke', w.done.count, 1);
+  }
+
+  // ---- leaving the box finishes it at once ------------------------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.type_('Kazipet');
+    field.fire('blur');
+    check('leaving the box finishes immediately', w.done.count, 1);
+    check('  and says why', w.done.why, 'left the box');
+  }
+
+  // ---- Enter finishes it at once ----------------------------------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.type_('Kazipet');
+    field.fire('keydown', { key: 'Enter' });
+    check('Enter finishes immediately', w.done.count, 1);
+    check('  and says why', w.done.why, 'pressed Enter');
+  }
+
+  // ---- an empty box never finishes, however long you wait ---------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.fire('blur');
+    tick(10000);
+    check('an empty box never finishes on blur', w.done.count, 0);
+    field.fire('keydown', { key: 'Enter' });
+    check('  nor on Enter', w.done.count, 0);
+  }
+
+  // ---- a PRE-FILLED box is not skipped ---------------------------------
+  {
+    const field = makeField({ value: 'NEW DELHI', attrs: {} });
+    const w = makeWatcher(field);
+    check('a pre-filled box asks the user to check it', w.hints[0], 'prefilledCheck');
+    tick(10000);
+    check('  and does NOT auto-skip, however long we wait', w.done.count, 0);
+    field.fire('blur');
+    check('  nor when the user simply leaves it', w.done.count, 0);
+    // Only once they have actually changed it.
+    field.type_('!');
+    tick(2600);
+    check('  but finishes once they change it and settle', w.done.count, 1);
+  }
+
+  // ---- an AUTOCOMPLETE waits for a suggestion to be chosen -------------
+  {
+    const field = makeField({ attrs: { 'aria-expanded': 'false', 'aria-controls': 'list1' } });
+    const w = makeWatcher(field);
+    field.type_('Secun');
+    w.openList();
+    tick(200);
+    check('an open list asks the user to pick from it', w.hints.indexOf('pickFromList') !== -1, true);
+    tick(5000);
+    check('  and 2.5s of not typing does NOT finish while it is open', w.done.count, 0);
+    field.fire('blur');
+    check('  nor does leaving the box', w.done.count, 0);
+    w.closeList();
+    tick(200);
+    check('  it finishes when a suggestion closes the list', w.done.count, 1);
+    check('  and says why', w.done.why, 'picked from the list');
+  }
+
+  // ---- an autocomplete whose list never opens still finishes -----------
+  {
+    const field = makeField({ attrs: { 'aria-autocomplete': 'list' } });
+    const w = makeWatcher(field);
+    field.type_('Warangal');
+    tick(2600);
+    check('an autocomplete whose list never opens falls back to the 2.5s rule',
+      w.done.count, 1);
+  }
+
+  // ---- stopping detaches everything ------------------------------------
+  {
+    const field = makeField();
+    const w = makeWatcher(field);
+    field.type_('Kazipet');
+    w.stop();
+    tick(10000);
+    check('after stop(), nothing fires', w.done.count, 0);
+  }
+}
+
+console.log('\n2g. Manual advance: exactly one step, and back again');
+{
+  const els = [{ i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false }];
+  const at = (url, elements) => ({ url: url, title: 'practice', elements: elements || els });
+  const PRACTICE = 'https://daari-ai.vercel.app/practice/index.html';
+
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiFail = 500;   // recipe-only, so the walk is deterministic
+  await call({ type: 'DAARI_START_FLOW', url: PRACTICE, goal: 'book a train ticket', tabId: 1 });
+
+  let step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at(PRACTICE)));
+  check('starts at step 1', step.number, 1);
+
+  step = await call(Object.assign({ type: 'DAARI_STEP_DONE' }, at(PRACTICE)));
+  check('one manual Done advances exactly one step', step.number, 2);
+
+  step = await call(Object.assign({ type: 'DAARI_STEP_DONE' }, at(PRACTICE)));
+  check('again: exactly one more', step.number, 3);
+
+  step = await call(Object.assign({ type: 'DAARI_STEP_BACK' }, at(PRACTICE)));
+  check('Go back returns exactly one step', step.number, 2);
+
+  step = await call(Object.assign({ type: 'DAARI_STEP_BACK' }, at(PRACTICE)));
+  check('and again', step.number, 1);
+
+  step = await call(Object.assign({ type: 'DAARI_STEP_BACK' }, at(PRACTICE)));
+  check('going back at step 1 stays at step 1', step.number, 1);
+
+  /* Going back must clear a confirmation: that answer was about the step they
+     are leaving, not the one they are returning to. */
+  await call({ type: 'DAARI_CONFIRMED' });
+  step = await call(Object.assign({ type: 'DAARI_STEP_BACK' }, at(PRACTICE)));
+  check('going back clears any confirmation given', step.confirmed, false);
+}
+
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);

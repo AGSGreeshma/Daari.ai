@@ -79,6 +79,114 @@ h1 { margin: 0; font-size: 21px; }
 .mic.listening { background: #b3261e; animation: breathe 1.5s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 
+/* While listening, the button says what tapping it will DO, not what Daari is
+   doing. Green because it is the action that moves things on. */
+.mic.sending { background: var(--green); }
+.mic.sending:hover { background: #17573a; }
+
+.mic-hint {
+  margin: 7px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  text-align: center;
+  min-height: 19px;
+}
+
+/* Deliberately quiet: cancelling should be findable, never the obvious tap. */
+.mic-cancel {
+  display: none;
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 2px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.mic-cancel:hover { border-color: #c9c3b6; color: var(--ink); }
+
+/* ---------- is this right? ---------- */
+.confirm-box {
+  display: none;
+  margin-top: 12px;
+  padding: 14px;
+  background: #fff4e8;
+  border: 2px solid var(--orange);
+  border-radius: 11px;
+}
+.confirm-heading {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--orange);
+}
+.confirm-box textarea {
+  width: 100%;
+  padding: 11px;
+  font-size: 19px;
+  line-height: 1.4;
+  font-family: inherit;
+  border: 2px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  resize: vertical;
+}
+.confirm-actions { display: flex; gap: 7px; margin-top: 9px; }
+.confirm-actions button {
+  flex: 1;
+  padding: 13px 8px;
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: bold;
+  border: 0;
+  border-radius: 9px;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+}
+.confirm-actions button.ghost {
+  background: var(--panel);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  font-weight: normal;
+}
+
+/* ---------- manual advance ---------- */
+.done-next {
+  display: none;
+  width: 100%;
+  margin-top: 11px;
+  padding: 16px;
+  font-size: 17px;
+  font-family: inherit;
+  font-weight: bold;
+  border: 0;
+  border-radius: 11px;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+}
+.done-next:hover { background: #17573a; }
+
+.back-step {
+  display: none;
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 2px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.back-step:hover { border-color: #c9c3b6; color: var(--ink); }
+
 /* ---------- what we heard ---------- */
 .transcript {
   margin-top: 12px;
