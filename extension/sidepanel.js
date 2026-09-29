@@ -617,6 +617,86 @@
   }
 
   /* =================================================================
+     What to DO with a goal
+
+     These two were deleted by accident in the Phase B mic rewrite: they lived
+     inside the section that got replaced, and their callers were left behind.
+     "Yes, go" and "Start demo on this page" both threw a ReferenceError and did
+     nothing at all. node --check could not see it, because the file parsed
+     perfectly -- which is the whole reason tests/lint.js and
+     tests/smoke-panel.js now exist.
+     ================================================================= */
+
+  function acceptGoal(text) {
+    var trimmed = String(text || '').trim();
+    if (!trimmed) { return; }
+    setTranscript(trimmed, true);
+    el.goal.textContent = '';
+    var cap = document.createElement('span');
+    cap.className = 'cap';
+    cap.textContent = T(S.ui.yourGoal, lang);
+    var words = document.createElement('span');
+    words.textContent = trimmed;
+    el.goal.appendChild(cap);
+    el.goal.appendChild(words);
+    el.goal.style.display = 'block';
+    el.goal.setAttribute('lang', lang);
+
+    /* Saying what you want IS the instruction. One action for the user: speak,
+       and the first ring appears. Stop guidance is right there if Daari
+       mis-heard. */
+    startFlow(trimmed, null);
+  }
+
+  async function startFlow(goal, forcedFlowId) {
+    clearMessage();
+    try {
+      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      var tab = tabs[0];
+      if (!tab) { throw new Error('No page is open.'); }
+
+      var reply = await chrome.runtime.sendMessage({
+        type: 'DAARI_START_FLOW',
+        goal: goal,
+        flowId: forcedFlowId || undefined,
+        tabId: tab.id,
+        /* The worker needs the address, not just the tab: a recipe only runs on
+           its own site, and it checks that before anything else. */
+        url: tab.url || ''
+      });
+
+      /* Asking for a specific recipe on the wrong site is refused outright, and
+         no session is created. Say so plainly rather than starting something
+         that would then claim "Step 3 of 15" about a page it does not know. */
+      if (reply && reply.wrongSite) {
+        showMessage('bad',
+          'That demo only runs on the practice site.\n\n' +
+          reply.reason + '\n\n' +
+          'Open the practice site to run the demo, or just say what you want to do ' +
+          'here and I will read this page myself.');
+        return;
+      }
+
+      /* The session exists now, so ask the page to report in with what it can
+         see. Everything after this is the worker's decision. */
+      await chrome.tabs.sendMessage(tab.id, { type: 'DAARI_ASK_AGAIN' });
+      refreshStatus();
+
+      if (reply && reply.aiOnly) {
+        showMessage('info',
+          'I have no saved route for this site, so I will read the page myself. ' +
+          'I will tell you if I am unsure rather than guessing.');
+      }
+    } catch (e) {
+      showMessage('bad',
+        'Could not start on that page.\n\n' +
+        'If the page was already open when the extension was reloaded, reload the ' +
+        'page (F5) and try again.\n\nDetails: ' + e.message);
+    }
+  }
+
+
+  /* =================================================================
      Messages from the overlay inside the page
      ================================================================= */
 

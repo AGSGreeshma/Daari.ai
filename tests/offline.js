@@ -125,6 +125,166 @@ const page = (url, elements) => ({ url, title: 'Yatra Demo Rail', elements });
 // ============================================================================
 (async function run() {
 
+console.log('\n0. Nothing calls a function that does not exist');
+{
+  /* This shipped three times: resolveByName renamed with a caller left behind,
+     then acceptGoal and startFlow spliced out of sidepanel.js with their callers
+     left behind. Every one parsed perfectly and every one broke the product --
+     the first threw on every page Daari loaded on, the other two made the panel's
+     two main buttons do nothing at all.
+
+     This runs first because it is the cheapest check in the suite and the one
+     that has caught the most real bugs. */
+  const problems = require(path.join(ROOT, 'tests', 'lint.js')).run();
+  check('no undefined function calls in any extension file', problems, 0);
+}
+
+console.log('\n0b. The side panel buttons actually do something');
+{
+  /* The lint finds a call to a function that is not there. This finds everything
+     else that makes a button dead: a handler on the wrong element, a message with
+     the wrong type, a guard returning early, a typo in an id.
+
+     It loads the REAL config.js, strings.js, tts.js and sidepanel.js with a fake
+     DOM and a fake chrome, and presses the buttons. */
+  const { loadPanel } = require(path.join(ROOT, 'tests', 'smoke-panel.js'));
+
+  // ---- it loads at all -------------------------------------------------
+  {
+    const panel = loadPanel();
+    check('the panel loads without throwing', true, true);
+    check('the language buttons were built', panel.el.langs.children.length, 3);
+    check('the mic has a click handler', panel.el.mic._listens('click'), true);
+    check('Start demo has a click handler', panel.el.startDemo._listens('click'), true);
+    check('Yes, go has a click handler', panel.el.confirmSend._listens('click'), true);
+    check('Done - next step has a click handler', panel.el.manualDone._listens('click'), true);
+    check('Go back has a click handler', panel.el.manualBack._listens('click'), true);
+  }
+
+  // ---- "Start demo on this page", on the practice site ------------------
+  {
+    const panel = loadPanel({ tabUrl: 'https://daari-ai.vercel.app/practice/index.html' });
+    panel.sent.length = 0;
+    panel.el.startDemo._fire('click');
+    await new Promise((r) => setImmediate(r));
+
+    const start = panel.sent.filter((m) => m.type === 'DAARI_START_FLOW')[0];
+    check('Start demo sends DAARI_START_FLOW', !!start, true);
+    check('  forcing the practice recipe', start && start.flowId, 'book-ticket');
+    check('  and passes the page address, which the host check needs',
+      start && /practice/.test(start.url || ''), true);
+    check('  and the tab id', start && start.tabId, 7);
+    check('  then asks the page to report in',
+      panel.toTab.some((t) => t.message.type === 'DAARI_ASK_AGAIN'), true);
+  }
+
+  // ---- "Start demo" off-site is refused, and says so --------------------
+  {
+    const panel = loadPanel({
+      tabUrl: 'https://www.irctc.co.in/nget/train-search',
+      replies: { DAARI_START_FLOW: { ok: false, wrongSite: true, reason: 'That recipe is for daari-ai.vercel.app, and this page is www.irctc.co.in.' } }
+    });
+    panel.el.startDemo._fire('click');
+    await new Promise((r) => setImmediate(r));
+
+    check('a refused start shows a message', /only runs on the practice site/.test(panel.el.message.textContent), true);
+    check('  naming the site', /irctc/.test(panel.el.message.textContent), true);
+    check('  and does NOT ask the page to start',
+      panel.toTab.some((t) => t.message.type === 'DAARI_ASK_AGAIN'), false);
+  }
+
+  // ---- "Yes, go" sends the CORRECTED text ------------------------------
+  {
+    const panel = loadPanel({ tabUrl: 'https://daari-ai.vercel.app/practice/' });
+    panel.el.confirmText.value = '  I want to book a train ticket to Kazipet  ';
+    panel.sent.length = 0;
+    panel.el.confirmSend._fire('click');
+    await new Promise((r) => setImmediate(r));
+
+    const start = panel.sent.filter((m) => m.type === 'DAARI_START_FLOW')[0];
+    check('Yes, go starts a flow', !!start, true);
+    check('  with the text from the box, trimmed',
+      start && start.goal, 'I want to book a train ticket to Kazipet');
+    check('  and no forced recipe, so the goal picks one',
+      start && start.flowId, undefined);
+    check('  and the goal is shown back to the user',
+      /Kazipet/.test(panel.el.goal.children.map((c) => c.textContent).join(' ')), true);
+  }
+
+  // ---- an empty confirm box sends nothing ------------------------------
+  {
+    const panel = loadPanel();
+    panel.el.confirmText.value = '   ';
+    panel.sent.length = 0;
+    panel.el.confirmSend._fire('click');
+    await new Promise((r) => setImmediate(r));
+    check('an empty box starts nothing',
+      panel.sent.filter((m) => m.type === 'DAARI_START_FLOW').length, 0);
+  }
+
+  // ---- the manual controls reach the page ------------------------------
+  {
+    const panel = loadPanel();
+    panel.el.manualDone._fire('click');
+    await new Promise((r) => setImmediate(r));
+    check('Done - next step reaches the page',
+      panel.toTab.some((t) => t.message.type === 'DAARI_MANUAL_DONE'), true);
+
+    panel.el.manualBack._fire('click');
+    await new Promise((r) => setImmediate(r));
+    check('Go back a step reaches the page',
+      panel.toTab.some((t) => t.message.type === 'DAARI_MANUAL_BACK'), true);
+  }
+
+  // ---- the confirm gate button ----------------------------------------
+  {
+    const panel = loadPanel();
+    panel.sent.length = 0;
+    panel.el.confirm._fire('click');
+    await new Promise((r) => setImmediate(r));
+    check('I have checked sends DAARI_CONFIRMED',
+      panel.sent.some((m) => m.type === 'DAARI_CONFIRMED'), true);
+  }
+
+  // ---- Stop guidance --------------------------------------------------
+  {
+    const panel = loadPanel();
+    panel.sent.length = 0;
+    panel.el.stopGuidance._fire('click');
+    await new Promise((r) => setImmediate(r));
+    check('Stop guidance sends DAARI_STOP_FLOW',
+      panel.sent.some((m) => m.type === 'DAARI_STOP_FLOW'), true);
+  }
+
+  // ---- the mic, and the tap-to-send states ----------------------------
+  {
+    const panel = loadPanel({ lang: 'en' });
+    /* Labels are applied once chrome.storage has handed back the saved language,
+       which is a promise, so nothing is labelled until it settles. */
+    await new Promise((r) => setImmediate(r));
+    check('the mic starts as "Speak your goal"', panel.el.mic.textContent, 'Speak your goal');
+    panel.el.mic._fire('click');
+    check('tapping it starts listening and offers to send',
+      panel.el.mic.textContent, 'Tap to send');
+    check('  and Cancel appears', panel.el.micCancel.style.display, 'block');
+    panel.el.micCancel._fire('click');
+    check('Cancel returns it to idle', panel.el.mic.textContent, 'Speak your goal');
+    check('  and hides Cancel', panel.el.micCancel.style.display, 'none');
+  }
+
+  // ---- a language button switches every label -------------------------
+  {
+    const panel = loadPanel({ lang: 'en' });
+    await new Promise((r) => setImmediate(r));
+    const telugu = panel.el.langs.children.filter((c) => c.dataset.code === 'te')[0];
+    check('there is a Telugu button', !!telugu, true);
+    telugu._fire('click');
+    check('choosing Telugu saves it', panel.stored.lang, 'te');
+    check('  and relabels the mic', panel.el.mic.textContent, 'మీ పని చెప్పండి');
+    check('  and relabels Done - next step', panel.el.manualDone.textContent, 'అయింది - తర్వాత');
+  }
+}
+
 console.log('\n1. Recipes load and are well formed');
 {
   for (const file of ['practice-book-ticket', 'practice-check-pnr']) {
