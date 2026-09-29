@@ -1058,6 +1058,193 @@ console.log('\n2g. Manual advance: exactly one step, and back again');
   check('going back clears any confirmation given', step.confirmed, false);
 }
 
+console.log('\n2j. A submit completes on the NEXT PAGE, never on the click');
+{
+  /* The bug this section exists for, in the reporter's words: "I typed only 4
+     digits in Card number and pressed Pay. The page showed its red error and
+     stayed on payment.html -- but Daari jumped to step 15 of 15, FINISHED, Your
+     PNR is on the screen."
+
+     Claiming a success that did not happen is the worst thing Daari can do to
+     somebody who will not second-guess it. */
+
+  const B = 'https://daari-ai.vercel.app/practice/';
+  const pageOf = { index: B, results: B + 'results.html', passenger: B + 'passenger.html',
+    payment: B + 'payment.html', confirmation: B + 'confirmation.html' };
+  const CARD = [
+    { i: 0, tag: 'input', type: 'text', name: 'Card number *', filled: false },
+    { i: 1, tag: 'button', type: 'submit', name: 'Pay ₹263', filled: false }
+  ];
+  const at = (page, elements) => ({ url: pageOf[page], title: page, elements: elements || CARD });
+
+  async function sessionOnStep(index) {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    aiFail = 500;   // recipe only, so the walk is deterministic
+    await call({ type: 'DAARI_START_FLOW', url: pageOf.index, goal: 'book a train ticket', tabId: 1 });
+    const s = storage.session.daariSession;
+    s.stepIndex = index;
+    s.confirmedStep = index;      // past the gate, so the Pay step is live
+    await chrome.storage.session.set({ daariSession: s });
+    return s;
+  }
+
+  // ---- THE EXACT BUG: a stale completion must not move the flow ----------
+  {
+    await sessionOnStep(13);                       // the Pay step
+    let step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at('payment')));
+    check('on the Pay step', step.number, 14);
+    check('  and it waits for the page, not the click', step.done_when, 'url_changed');
+
+    /* The stale completion: the card step's settle rule fired late, because
+       clicking Pay blurred the box. It names step 12; we are on 13. */
+    step = await call(Object.assign({ type: 'DAARI_STEP_DONE', forStep: 12 }, at('payment')));
+    check('a completion for a step we have LEFT is ignored', step.number, 14);
+    check('  so Daari does NOT claim to have finished', !!step.final, false);
+    check('  and stays on the payment page step', step.done_when, 'url_changed');
+  }
+
+  // ---- and an unstamped completion still works, for older callers --------
+  {
+    await sessionOnStep(12);
+    let step = await call(Object.assign({ type: 'DAARI_STEP_DONE' }, at('payment')));
+    check('a completion with no step named still advances', step.number, 14);
+  }
+
+  // ---- the refused Pay: page never changes ------------------------------
+  {
+    await sessionOnStep(13);
+    await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at('payment')));
+
+    /* No navigation, so no page report. The page notices nothing happened and
+       says the site refused it. */
+    const step = await call(Object.assign({ type: 'DAARI_STEP_REJECTED', forStep: 13 }, at('payment')));
+    check('a refused Pay goes back to the Card number step', step.number, 13);
+    check('  which is the card box, by name',
+      /card number/i.test(step.say + ' ' + JSON.stringify(step.look_for)), true);
+    check('  and says the site did not accept it',
+      step.notice, ctx.self.DAARI_STRINGS.ui.notAccepted.en);
+    check('  and is marked as a rejection', step.rejected, true);
+    check('  and it is NOT finished', !!step.final, false);
+  }
+
+  // ---- a VALID card: the page moves, and only then is it finished --------
+  {
+    await sessionOnStep(13);
+    await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at('payment')));
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at('confirmation', [])));
+    check('reaching the confirmation page finishes it', step.final, true);
+    check('  at step 15 of 15', [step.number, step.total], [15, 15]);
+    check('  and says the PNR is on screen', /PNR/.test(step.say), true);
+  }
+
+  // ---- Search refused because From and To match -------------------------
+  {
+    const SEARCH = [
+      { i: 0, tag: 'input', type: 'text', name: 'From station *', filled: true },
+      { i: 1, tag: 'input', type: 'text', name: 'To station *', filled: true },
+      { i: 2, tag: 'select', type: '', name: 'Class', filled: true },
+      { i: 3, tag: 'button', type: 'submit', name: 'Search Trains', filled: false }
+    ];
+    await sessionOnStep(3);                        // the Search Trains step
+    await call(Object.assign({ type: 'DAARI_PAGE_READY' }, at('index', SEARCH)));
+    const step = await call(Object.assign({ type: 'DAARI_STEP_REJECTED', forStep: 3 },
+      at('index', SEARCH)));
+    check('a refused Search goes back to the To station step', step.number, 2);
+    check('  pointing at the To box',
+      /to station/i.test(JSON.stringify(step.look_for)), true);
+    check('  and says the site did not accept it',
+      step.notice, ctx.self.DAARI_STRINGS.ui.notAccepted.en);
+  }
+
+  // ---- a rejection for a step we have left is ignored too ---------------
+  {
+    await sessionOnStep(13);
+    const step = await call(Object.assign({ type: 'DAARI_STEP_REJECTED', forStep: 5 }, at('payment')));
+    check('a rejection for a step we have left changes nothing', step.number, 14);
+  }
+}
+
+console.log('\n2k. The final step checks it is actually on the final page');
+{
+  const B = 'https://daari-ai.vercel.app/practice/';
+  const CARD = [
+    { i: 0, tag: 'input', type: 'text', name: 'Card number *', filled: false },
+    { i: 1, tag: 'button', type: 'submit', name: 'Pay ₹263', filled: false }
+  ];
+
+  /* Belt and braces for the same failure. Even if something did advance the flow
+     onto the final step while still on the payment page, it must not announce
+     success -- it must notice where it is and go back to work. */
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  aiFail = 500;
+  await call({ type: 'DAARI_START_FLOW', url: B, goal: 'book a train ticket', tabId: 1 });
+  const s = storage.session.daariSession;
+  s.stepIndex = 14;                       // the final step
+  await chrome.storage.session.set({ daariSession: s });
+
+  let step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    { url: B + 'payment.html', title: 'payment', elements: CARD }));
+
+  check('the final step on the WRONG page does not finish', !!step.final, false);
+  check('  it re-syncs to the first step of this page', step.number, 13);
+  check('  which is the Card number step',
+    /card number/i.test(JSON.stringify(step.look_for)), true);
+
+  // On the right page, it does finish.
+  storage.session = {}; chrome.storage.session = makeArea(storage.session);
+  await call({ type: 'DAARI_START_FLOW', url: B, goal: 'book a train ticket', tabId: 1 });
+  const s2 = storage.session.daariSession;
+  s2.stepIndex = 14;
+  await chrome.storage.session.set({ daariSession: s2 });
+  step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    { url: B + 'confirmation.html', title: 'done', elements: [] }));
+  check('the final step on the RIGHT page does finish', step.final, true);
+}
+
+console.log('\n2l. Every recipe step that changes page waits for the page');
+{
+  /* A structural rule, asserted rather than trusted: if the next step lives on a
+     different page, this step must complete on the page arriving or on a success
+     text -- never on a click, which proves only that a button was pressed. */
+  for (const file of fs.readdirSync(path.join(EXT, 'recipes'))) {
+    if (!file.endsWith('.json')) { continue; }
+    const recipe = JSON.parse(fs.readFileSync(path.join(EXT, 'recipes', file), 'utf8'));
+    /* A disabled recipe is a stub with placeholder steps; holding it to the rule
+       would only teach us to ignore the rule. */
+    if (recipe.enabled === false) { continue; }
+    let bad = 0;
+    recipe.steps.forEach((step, i) => {
+      const next = recipe.steps[i + 1];
+      if (!next || !next.page || !step.page || next.page === step.page) { return; }
+      const kind = String(step.done_when || '').split(':')[0];
+      if (kind !== 'url_changed' && kind !== 'text_appears') {
+        console.log('  ' + file + ' step ' + i + ' changes page but completes on "' + kind + '"');
+        bad += 1;
+      }
+    });
+    check(recipe.task + ': page-changing steps wait for the page', bad, 0);
+
+    /* And each of those names where to go back to -- but only where a refusal
+       could be about something the user typed. A step that merely follows a link
+       (Book, on a page with no fields) cannot be refused over a value, so
+       demanding an on_reject for it would be noise. */
+    let missing = 0;
+    recipe.steps.forEach((step, i) => {
+      const next = recipe.steps[i + 1];
+      const changesPage = next && next.page && step.page && next.page !== step.page;
+      if (!changesPage) { return; }
+      const hasFieldsBefore = recipe.steps.slice(0, i).some((earlier) =>
+        earlier.page === step.page && /field_filled|value_changed/.test(earlier.done_when || ''));
+      if (!hasFieldsBefore) { return; }
+      if (typeof step.on_reject !== 'number') {
+        console.log('  ' + file + ' step ' + i + ' can be refused over a typed value but names no on_reject');
+        missing += 1;
+      }
+    });
+    check(recipe.task + ': refusable steps name where to go back to', missing, 0);
+  }
+}
+
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);

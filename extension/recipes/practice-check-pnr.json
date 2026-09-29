@@ -67,7 +67,8 @@
         "en": "Now press Check status",
         "hi": "अब Check status दबाइए",
         "te": "ఇప్పుడు Check status నొక్కండి"
-      }
+      },
+      "on_reject": 1
     },
     {
       "page": "pnr",
@@ -78,5 +79,6 @@
         "te": "మీ బుకింగ్ స్థితి స్క్రీన్ మీద ఉంది. బాగా చేశారు!"
       }
     }
-  ]
+  ],
+  "_on_reject_why": "on_reject: see the booking recipe. A ten-digit check on the PNR box means Check status can be refused, and the box is what the user must fix."
 }

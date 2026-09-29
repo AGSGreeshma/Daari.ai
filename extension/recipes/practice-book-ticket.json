@@ -81,7 +81,8 @@
         "en": "Now press this Search Trains button",
         "hi": "अब यह Search Trains बटन दबाइए",
         "te": "ఇప్పుడు ఈ Search Trains బటన్ నొక్కండి"
-      }
+      },
+      "on_reject": 1
     },
     {
       "page": "results",
@@ -181,7 +182,8 @@
         "en": "Now press Continue to Payment",
         "hi": "अब Continue to Payment दबाइए",
         "te": "ఇప్పుడు Continue to Payment నొక్కండి"
-      }
+      },
+      "on_reject": 10
     },
     {
       "page": "payment",
@@ -207,7 +209,8 @@
         "en": "Now press the Pay button",
         "hi": "अब Pay बटन दबाइए",
         "te": "ఇప్పుడు Pay బటన్ నొక్కండి"
-      }
+      },
+      "on_reject": 12
     },
     {
       "page": "confirmation",
@@ -219,5 +222,6 @@
         "te": "మీ PNR స్క్రీన్ మీద ఉంది. బాగా చేశారు!"
       }
     }
-  ]
+  ],
+  "_on_reject_why": "on_reject: which step to return to when the site refuses what was typed and the page does not move. A submit step completes ONLY on reaching the next page, never on the click, so a refusal leaves Daari standing on the submit step with nothing to do. It goes back to the step the complaint is about and says so. Default would be one step back, which is right for Pay but wrong for Search, where the rejection is about stations three steps earlier."
 }

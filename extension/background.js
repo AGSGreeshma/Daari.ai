@@ -308,7 +308,18 @@ async function decideStep(session, page) {
 
   var payload = {
     active: true,
+    /* The step's own index, sent explicitly so the page can stamp a completion
+       with it. Deriving it from "number" invites an off-by-one in the one place
+       an off-by-one would silently skip a step. */
+    stepIndex: session.stepIndex,
     number: session.stepIndex + 1,
+    /* The labels this step is looking for.
+
+       These stopped being sent in Phase 5, when the worker began resolving the
+       element itself -- which quietly killed waitForElement() in the overlay, the
+       recovery path for an element that has not rendered yet. It resolved against
+       an undefined list, found nothing, and retried forever. Sent again. */
+    look_for: [],
     total: recipe ? recipe.steps.length : 0,
     lang: lang,
     sensitive: !!(recipeStep && recipeStep.sensitive),
@@ -326,12 +337,46 @@ async function decideStep(session, page) {
     confirmed: session.confirmedStep === session.stepIndex
   };
 
+  if (recipeStep && recipeStep.look_for) { payload.look_for = recipeStep.look_for; }
+
   payload.stepLabel = payload.total
     ? self.DAARI_T(S.ui.stepOf, lang, { n: payload.number, total: payload.total })
     : self.DAARI_T(S.ui.stepOnly, lang, { n: payload.number });
 
-  /* The last step of a recipe points at nothing. */
+  /* The last step of a recipe points at nothing -- but it must FIRST be sure it
+     is actually on the page where finishing happens.
+
+     "Finished. Your PNR is on the screen" announced on the payment page, with a
+     validation error showing, is the worst thing Daari can say: it is a claim of
+     success to somebody who will not second-guess it. So the final step checks
+     the page it is standing on, and if it is the wrong one, re-syncs to the first
+     step that belongs to this page instead of announcing anything. */
   if (payload.final) {
+    var whereWeAre = self.DAARI_PAGE_OF(page && page.url);
+    var onTheRightPage = !recipeStep.page || whereWeAre === recipeStep.page;
+
+    if (!onTheRightPage) {
+      var resync = firstStepOnPage(recipe, whereWeAre, recipe.steps.length);
+      if (resync !== -1) {
+        console.warn('[Daari] final step reached on "' + whereWeAre +
+                     '" instead of "' + recipeStep.page + '"; re-syncing to step ' + resync);
+        session.stepIndex = resync;
+        session.finished = false;
+        session.confirmedStep = null;
+        session.awaitingConfirm = null;
+        /* Decide again from the corrected position. One retry only: the new step
+           is never final, because a final step is only ever the last one. */
+        return await decideStep(session, page);
+      }
+      /* This page is in no recipe step at all. Say so rather than claim success. */
+      payload.final = false;
+      payload.index = -1;
+      payload.say = self.DAARI_T(S.ui.notSure, lang);
+      payload.path = 'none';
+      payload.why = 'final step reached on the wrong page (' + whereWeAre + ')';
+      return payload;
+    }
+
     payload.say = self.DAARI_T(recipeStep.say, lang);
     payload.path = 'recipe';
     return payload;
@@ -713,16 +758,71 @@ var HANDLERS = {
     return payload;
   },
 
-  /* The page saw the step finish, locally and for free. */
+  /* The page saw the step finish, locally and for free.
+
+     IT MUST SAY WHICH STEP. This used to advance unconditionally, and that let a
+     stale completion move the flow: clicking Pay blurred the Card number box, the
+     card step's settle rule fired and scheduled a completion, a confirm round trip
+     started a new step, and the old timer then advanced AGAIN -- 13 to 14, which
+     was the final step. Daari announced "Finished. Your PNR is on the screen" on
+     the payment page, having watched a validation error appear.
+
+     Claiming a success that did not happen is the worst thing Daari can do to
+     somebody who will not second-guess it. So a completion now carries the step
+     it is about, and one for a step we have already left is dropped. The page
+     also cancels its own stale timers, but this is the half that does not depend
+     on the page getting it right. */
   DAARI_STEP_DONE: async function (message) {
     var session = await getSession();
     if (!session) { return { active: false }; }
+
+    if (typeof message.forStep === 'number' && message.forStep !== session.stepIndex) {
+      console.warn('[Daari] ignoring a completion for step ' + message.forStep +
+                   ' while on step ' + session.stepIndex);
+      return await decideStep(session, message);
+    }
 
     var recipe = await recipeFor(session);
     advance(session, recipe, message.url);
 
     var payload = await decideStep(session, message);
     if (payload.final) { session.finished = true; }
+    await saveSession(session);
+    return payload;
+  },
+
+  /* The site refused what was typed and the page did not move.
+
+     A submit step completes only on reaching the next page, so a refusal leaves
+     Daari standing on a submit step with nothing left to do. Rather than wait
+     forever, it goes back to the step the complaint is about -- named by the
+     recipe, because "one step back" is right for Pay and wrong for Search, where
+     the rejection is about stations three steps earlier. */
+  DAARI_STEP_REJECTED: async function (message) {
+    var session = await getSession();
+    if (!session) { return { active: false }; }
+
+    var recipe = await recipeFor(session);
+    var step = recipe ? recipe.steps[session.stepIndex] : null;
+
+    /* Ignore a rejection for a step we have already left, for the same reason
+       completions are checked. */
+    if (typeof message.forStep === 'number' && message.forStep !== session.stepIndex) {
+      return await decideStep(session, message);
+    }
+
+    var back = step && typeof step.on_reject === 'number'
+      ? step.on_reject
+      : Math.max(0, session.stepIndex - 1);
+
+    session.stepIndex = back;
+    session.confirmedStep = null;
+    session.awaitingConfirm = null;
+    session.finished = false;
+
+    var payload = await decideStep(session, message);
+    payload.notice = self.DAARI_T(self.DAARI_STRINGS.ui.notAccepted, await currentLang());
+    payload.rejected = true;
     await saveSession(session);
     return payload;
   },

@@ -721,6 +721,8 @@
 
   function stopEverything() {
     clearAdvanceTimers();
+    clearRefusalWatch();
+    clearRefusalWatch();
     if (stopWatching) { stopWatching(); stopWatching = null; }
     if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
     currentStepPayload = null;
@@ -738,7 +740,7 @@
      and silence for six seconds reads as "broken" to a first-time user. */
   var fillerTimer = null;
 
-  function requestStep(type) {
+  function requestStep(type, extra) {
     var list = serializePage();
 
     /* Rule 2, checked on the way out. If this ever trips, something upstream is
@@ -751,12 +753,15 @@
 
     startFiller();
 
-    return ask({
+    return ask(Object.assign({
       type: type,
       url: location.href,
       title: document.title || '',
-      elements: list
-    }).then(function (payload) {
+      elements: list,
+      /* Which step this is about. The worker drops a completion for a step it has
+         already left, so a stale timer cannot move the flow. */
+      forStep: currentStepPayload ? currentStepPayload.stepIndex : undefined
+    }, extra || {})).then(function (payload) {
       stopFiller();
       return payload;
     });
@@ -778,6 +783,12 @@
   /* Do one step. The worker has already decided WHICH element and WHAT to say;
      this finds it on screen, points at it, and watches for the user. */
   function runStep(payload) {
+    /* A pending advance from the PREVIOUS step must not survive into this one.
+       It used to: clicking Pay blurred the Card number box, the card step's
+       settle rule scheduled a completion, a confirm round trip started the Pay
+       step, and the old timer then fired and advanced the flow again -- onto the
+       final step, which announced "Finished" on the payment page. */
+    clearAdvanceTimers();
     if (stopWatching) { stopWatching(); stopWatching = null; }
     if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
 
@@ -840,6 +851,21 @@
        as Daari losing its place. */
     announce(say, payload.stepLabel, '', lang);
 
+    /* A step that waits for the page to change needs a second pair of eyes.
+
+       It completes ONLY when the next page arrives -- never on the click -- which
+       is right, and which means a refused submit leaves Daari standing there with
+       nothing to do. That is what happened with four digits in the card box: the
+       site showed its error, the page stayed put, and Daari had no way to notice.
+
+       So on a page-changing step, the click is watched too. Not to complete the
+       step -- the click proves nothing -- but to start a clock. If this code is
+       still running a few seconds later, the page never went anywhere, and the
+       only honest reading is that the site refused it. */
+    if (ruleKindOf(payload.done_when) === 'url_changed') {
+      watchForRefusal(payload, lang);
+    }
+
     stopWatching = watchForDone(payload.done_when, payload.index,
       function () { advance(lang, 1000); },
       /* The hint channel: a step can say something extra -- "pick from the list",
@@ -868,8 +894,64 @@
     advanceTimers = [];
   }
 
+  function ruleKindOf(rule) {
+    return String(rule || '').split(':')[0];
+  }
+
+  /* Notice a submit the website refused.
+
+     HOW LONG TO WAIT. Long enough that a slow page is not mistaken for a refusal,
+     short enough that the user is not left staring at an error with no guidance.
+     Three seconds: a form post that has not started navigating by then has almost
+     certainly been stopped by the page's own validation. If it turns out to be a
+     slow site rather than a refusal, the next page arriving re-syncs everything
+     anyway, because the worker settles pages by their own report. */
+  var REFUSAL_MS = 3000;
+  var refusalStop = null;
+
+  function clearRefusalWatch() {
+    if (refusalStop) { refusalStop(); refusalStop = null; }
+  }
+
+  function watchForRefusal(payload, lang) {
+    clearRefusalWatch();
+
+    var entry = lastList[payload.index];
+    var el = entry ? entry.el : null;
+    if (!el) { return; }
+
+    var timer = null;
+    var startedAt = location.href;
+
+    function onClick(event) {
+      if (event.target !== el && !el.contains(event.target)) { return; }
+      if (timer !== null) { return; }
+
+      timer = window.setTimeout(function () {
+        timer = null;
+        /* Still here, on the same address, several seconds after the press. */
+        if (location.href !== startedAt) { return; }
+        if (currentStepPayload !== payload) { return; }
+
+        requestStep('DAARI_STEP_REJECTED').then(function (next) {
+          if (next && next.active) { runStep(next); }
+        });
+      }, REFUSAL_MS);
+    }
+
+    /* Listening, in the capture phase, exactly as everywhere else. Daari produces
+       no clicks of its own and never calls preventDefault. */
+    document.addEventListener('click', onClick, true);
+
+    refusalStop = function () {
+      document.removeEventListener('click', onClick, true);
+      if (timer !== null) { window.clearTimeout(timer); timer = null; }
+    };
+  }
+
   function advance(lang, pauseMs) {
     clearAdvanceTimers();
+    clearRefusalWatch();
     if (stopWatching) { stopWatching(); stopWatching = null; }
 
     advanceTimers.push(window.setTimeout(function () {

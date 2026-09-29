@@ -69,6 +69,16 @@ self.DAARI_STRINGS = {
       te: 'మీరు ముందుకు వచ్చారు - ఇక్కడ నుండి కొనసాగిద్దాం.'
     },
 
+    /* The website refused what was typed. Daari pressed nothing and cannot read
+       the site's own error message yet, so it says the honest minimum: the site
+       did not accept it, look at this box. Reading the exact message aloud is
+       Phase C. */
+    notAccepted: {
+      en: 'The website did not accept that. Please check this box.',
+      hi: 'वेबसाइट ने इसे स्वीकार नहीं किया। यह बॉक्स देख लीजिए।',
+      te: 'వెబ్‌సైట్ దీన్ని అంగీకరించలేదు. ఈ బాక్స్ చూడండి.'
+    },
+
     /* Said after a step finishes, before the next instruction, with about a
        second of quiet either side. Real testing said the steps "rush ahead while
        I am still typing" -- this is the pause made audible, so finishing a step
