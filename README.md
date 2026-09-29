@@ -117,7 +117,19 @@ press the wrong button.
 ## Results
 
 <!--NUMBERS-->
-Not yet measured. Run `npm run eval`, then `npm run numbers` to fill this in.
+
+| Measure | Result | What it means |
+|---|---|---|
+| Final accuracy | **96.9%** | Steps where Daari pointed at the correct element. What the user experiences. |
+| AI accuracy, model alone | **96.9%** | The model with no recipe to help it. The gap below is the safety net working. |
+| Dangerous buttons caught | **2 / 3** | Daari stopped and made the user look before every one. |
+| False stops | **1** | Times it stopped when nothing was at stake. |
+| Declined rather than guessed | **100%** | On 5 goals the page could not do, Daari said so instead of pointing somewhere. |
+| Payloads carrying what you typed | **0%** | Nothing you type is ever sent. Anything but zero here is a bug. |
+| Response time | **1396 ms average** | Slowest 1934 ms. Daari speaks a filler at 1500 ms so silence is never heard. |
+
+<sub>32 cases against snapshots of real pages, run 2026-09-29. Reproduce with `npm run eval`; raw output in `tests/results.json`.</sub>
+
 <!--/NUMBERS-->
 
 ## Setup
@@ -204,11 +216,12 @@ Stated honestly, because a judge will find them anyway.
 - **Strict Content-Security-Policy sites** may block the ring. The stylesheet is applied as a
   constructable stylesheet specifically to survive most of these.
 - **CAPTCHAs.** Daari says "type the letters yourself" and will not read or solve one.
-- **A bare "Pay Now" *link* does not trip the confirm gate.** The gate fires on anything that acts (a
-  button, or a link with `role="button"`), and on an ordinary link only when it names a booking it
-  would cancel or names money *with an amount*. "Pay ₹378" as a link is caught; "Pay Now" is not.
-  Catching it would also stop every "Payment options" link, and a stop that fires on help pages is one
-  people learn to dismiss. Recorded as a known gap in the harness.
+- **The confirm gate reads grammar, not just words.** It fires on anything that acts (a button, or a
+  link with `role="button"`), and on an ordinary link when it names a booking it would cancel, names
+  money with an amount, or *is a payment action*. "Pay", "Pay Now", "Make payment" and "Proceed to
+  pay" are gated; "Payment options", "Payment methods" and "Refund rules" are not, because "Pay" is a
+  verb and "Payment" is a noun. A stop that fires on help pages is one people learn to dismiss, which
+  makes every real stop worth less.
 - **Four identical "Book" buttons cannot be told apart.** Daari rings the first and says "next to the
   train you want". Honest, but it means Daari cannot act on *which* train you meant — recipes have no
   way to disambiguate repeated controls.

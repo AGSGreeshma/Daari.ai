@@ -95,6 +95,44 @@ function looksLikeAnAmount(name) {
          /[₹$£€]/.test(name);
 }
 
+/* Is this name a payment ACTION, rather than a page ABOUT payment?
+
+   The distinction is grammatical, and it is the whole rule: "Pay" is a verb,
+   "Payment" is a noun. So "Pay now" takes money and "Payment options" explains
+   how. English makes this easy to get wrong, because both begin with the same
+   three letters -- which is why every pattern here is anchored on a word
+   boundary. "Payment options" must never match /^pay/.
+
+   This closes the gap where a bare "Pay Now" LINK, with no amount and no
+   role="button", was not gated. Amount or no amount, a link that says it pays is
+   a link Daari stops for. */
+self.DAARI_PAYMENT_ACTION_PATTERNS = [
+  /^pay\b/,                         /* Pay · Pay now · Pay ₹378 · Pay securely */
+  /\bpay\s*$/,                      /* Proceed to pay · Continue to pay */
+  /\band\s+pay\b/,                  /* Confirm and pay */
+  /\bpay\s+(now|here|online|securely|balance|fare|amount|total)\b/,
+
+  /* "payment" only counts with a verb attached to it, which is what keeps
+     "Payment options" and "Payment methods" out. */
+  /\b(make|complete|confirm|submit|finish|proceed\s+to|continue\s+to|go\s+to)\s+(the\s+|your\s+)?payment\b/,
+  /\bpayment\s*$/,                  /* Proceed to payment */
+
+  /* Telugu: చెల్లించు is the verb "pay". The noun is చెల్లింపు, a different
+     stem, so matching the verb stem cannot catch "payment options". */
+  /చెల్లించ/,
+
+  /* Hindi: भुगतान is the noun, so it needs its verb (करें / करना / कीजिए) to be
+     an action. "भुगतान विकल्प" -- payment options -- stays open. */
+  /भुगतान\s*(कर|कीज)/
+];
+
+function isPaymentAction(name) {
+  for (var i = 0; i < self.DAARI_PAYMENT_ACTION_PATTERNS.length; i++) {
+    if (self.DAARI_PAYMENT_ACTION_PATTERNS[i].test(name)) { return true; }
+  }
+  return false;
+}
+
 /* --------------------------------------------------------- word matching only
 
    Kept separate so it can be tested on its own, and so the three rules below
@@ -129,14 +167,13 @@ self.DAARI_NEEDS_CONFIRM = function (accessibleName) {
       "Cancel this booking" really does cancel a booking on plenty of sites.
 
    3. It does not act, but it names money AND an amount -- "Pay ₹378" as a
-      styled link. The amount is what distinguishes it from "Payment options",
-      which is a page about paying and should not stop anybody.
+      styled link.
 
-   REMAINING GAP, stated rather than hidden: a bare "Pay Now" LINK with no
-   amount and no role="button" still slips through. Rule 3 cannot catch it
-   without also stopping every "Payment options" link, and a stop that fires on
-   help pages is a stop people learn to dismiss. If a real site turns up with
-   one, this is the function to revisit. */
+   4. It does not act, but its name is a payment ACTION rather than a page about
+      payment -- "Pay Now", "Make payment", "Proceed to pay". Amount or not.
+      This closed the last known gap: rule 3 needed an amount, so a bare "Pay
+      Now" link slipped through. The verb/noun distinction is what keeps
+      "Payment options" and "Payment methods" open. */
 self.DAARI_MUST_CONFIRM = function (element) {
   if (!element) { return false; }
   var name = String(element.name || '').toLowerCase();
@@ -158,6 +195,9 @@ self.DAARI_MUST_CONFIRM = function (element) {
   if (containsAny(name, self.DAARI_MONEY_WORDS) && looksLikeAnAmount(name)) {
     return true;
   }
+
+  /* 4 */
+  if (isPaymentAction(name)) { return true; }
 
   return false;
 };

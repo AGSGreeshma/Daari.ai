@@ -291,12 +291,15 @@ console.log('\n2c. THE GATE DECISION: what a thing says AND what it is');
     [MUST(el('a', '', 'Cancellations')), MUST(el('button', 'button', 'Cancel'))],
     [false, true]);
 
-  /* THE GAP THAT REMAINS, recorded so it reads as a decision rather than an
-     oversight. Rule 3 needs an amount; a bare "Pay Now" link has none, and
-     catching it would also stop every "Payment options" link. */
-  check('KNOWN GAP: a bare "Pay Now" LINK is not caught',
-    MUST(el('a', '', 'Pay Now')), false);
-  check('  but the same words on a button are', MUST(el('button', 'button', 'Pay Now')), true);
+  /* THAT GAP IS NOW CLOSED. It used to be recorded here as a known limitation:
+     rule 3 needed an amount, so a bare "Pay Now" link slipped through, and
+     catching it looked like it would also stop every "Payment options" link.
+
+     Rule 4 does it on the grammar instead -- "Pay" is a verb, "Payment" is a
+     noun -- so both sides hold. Section 2h has the full matrix. */
+  check('a bare "Pay Now" LINK is now gated', MUST(el('a', '', 'Pay Now')), true);
+  check('  and "Payment options" still is not', MUST(el('a', '', 'Payment options')), false);
+  check('  and the same words on a button, as ever', MUST(el('button', 'button', 'Pay Now')), true);
 }
 
 console.log('\n2d. A recipe only ever runs on its OWN site');
@@ -455,6 +458,82 @@ console.log('\n2e. Matching a goal requires the right site TOO');
   step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     { url: PRACTICE, title: 'practice', elements: els }));
   check('coming back restores the recipe', [step.total, step.offSite], [15, false]);
+}
+
+console.log('\n2h. A LINK that pays is gated; a page ABOUT paying is not');
+{
+  /* The last known gap: rule 3 needed an amount, so a bare "Pay Now" LINK with
+     no amount and no role="button" was not gated. Rule 4 closes it on the
+     grammar -- "Pay" is a verb, "Payment" is a noun -- which is why every
+     pattern is anchored on a word boundary. "Payment options" must never match
+     /^pay/. */
+
+  const MUST = ctx.self.DAARI_MUST_CONFIRM;
+  const link = (name) => ({ tag: 'a', type: '', name: name });
+
+  // MUST GATE: the name is an action that takes money.
+  [
+    'Pay',
+    'Pay Now',
+    'Pay now',
+    'PAY NOW',
+    'Pay securely',
+    'Pay ₹378',
+    'Pay 500',
+    'Pay the fare',
+    'Pay balance',
+    'Make payment',
+    'Make the payment',
+    'Complete payment',
+    'Complete your payment',
+    'Confirm payment',
+    'Proceed to pay',
+    'Continue to pay',
+    'Proceed to payment',
+    'Confirm and pay',
+    'Finish payment',
+    'చెల్లించు',                        // Telugu: pay
+    'ఇప్పుడే చెల్లించండి',  // Telugu: pay now
+    'भुगतान करें',                  // Hindi: make payment
+    'भुगतान कीजिए'             // Hindi: make payment (polite)
+  ].forEach(function (name) {
+    check('LINK GATES: "' + name + '"', MUST(link(name)), true);
+  });
+
+  // MUST NOT GATE: informational. A stop on a help page is one people learn to
+  // dismiss without reading, which makes every real stop worth less.
+  [
+    'Payment options',
+    'Payment methods',
+    'Payment history',
+    'Payment FAQ',
+    'Payments and refunds',
+    'Refund rules',
+    'Refund policy',
+    'Refund and cancellation charges',
+    'About payments',
+    'How to pay by UPI',          // explains paying; does not pay
+    'Net banking',
+    'Debit / Credit card',
+    'Wallet',
+    'Terms of use',
+    'Privacy policy',
+    'Paytm',                      // brand name, not an instruction
+    'Payee details',
+    'भुगतान विकल्प'      // Hindi: payment options
+  ].forEach(function (name) {
+    check('LINK stays open: "' + name + '"', MUST(link(name)), false);
+  });
+
+  /* The pair that IS the rule. Three letters apart, opposite consequences. */
+  check('"Pay now" gated, "Payment options" open',
+    [MUST(link('Pay now')), MUST(link('Payment options'))], [true, false]);
+
+  /* And a button is still gated by rule 1, whatever the wording. */
+  const button = (name) => ({ tag: 'button', type: 'submit', name: name });
+  check('BUTTON "Pay Now" gated (rule 1)', MUST(button('Pay Now')), true);
+  check('BUTTON "Payment options" gated too, because pressing it acts',
+    MUST(button('Payment options')), true);
 }
 
 console.log('\n2f. PACING: the step waits for the user');

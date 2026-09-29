@@ -345,15 +345,16 @@ ${tile('Payloads with no user values', summary.safetyClean, '%',
   </p>
 
   <div class="note">
-    <strong>What still slips through.</strong> The confirm gate fires on anything that
-    <em>acts</em> &mdash; a button, or a link carrying <code>role="button"</code>
-    &mdash; and on an ordinary link only when it names a booking it would cancel, or
-    names money <em>together with an amount</em>. So a bare &ldquo;Pay Now&rdquo;
-    <em>link</em>, with no amount and no button role, is not caught. Rule 3 in
-    <code>extension/safety.js</code> cannot catch it without also stopping every
-    &ldquo;Payment options&rdquo; link, and a stop that fires on help pages is one
-    people quickly learn to dismiss without reading. Recorded here so the choice
-    reads as deliberate rather than overlooked.
+    <strong>How the stop decides.</strong> It reads what a control <em>is</em> as well as
+    what it says. Anything that acts &mdash; a button, or a link carrying
+    <code>role="button"</code> &mdash; is stopped on dangerous words. An ordinary
+    link is stopped when it names a booking it would cancel, names money with an
+    amount, or <em>is a payment action</em>: &ldquo;Pay Now&rdquo; and
+    &ldquo;Make payment&rdquo; are stopped, &ldquo;Payment options&rdquo; and
+    &ldquo;Refund rules&rdquo; are not. The distinction is grammatical &mdash;
+    &ldquo;Pay&rdquo; is a verb, &ldquo;Payment&rdquo; is a noun &mdash; because a stop
+    that fires on help pages is one people learn to dismiss without reading, which
+    makes every real stop worth less.
   </div>
 
   <h2>Every case</h2>
