@@ -156,3 +156,9 @@ Daari is built **phase by phase**, never all at once.
   longer exist and `tests/smoke-panel.js` presses the panel's buttons; between them they cover the
   failure that `node --check` cannot see, which is the failure that has actually reached users. Both
   run first in the suite precisely so there is no excuse for skipping them.
+
+- **Do not add Co-Authored-By trailers to commits.**
+
+  This is my repository and the contributor list should say so. `.claude/settings.json` sets
+  `includeCoAuthoredBy: false`, but the rule is written here too, because a settings file can be
+  lost and a rule in the brief cannot.
