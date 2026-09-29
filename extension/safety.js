@@ -166,38 +166,43 @@ self.DAARI_NEEDS_CONFIRM = function (accessibleName) {
    2. It does not act, but it says it cancels something BOOKED. An anchor like
       "Cancel this booking" really does cancel a booking on plenty of sites.
 
+   2. It does not act, but its name is a payment ACTION -- "Pay Now", "Make
+      payment", "Proceed to pay", with or without an amount. Money can move on a
+      link click, so these are stopped. The verb/noun distinction is what keeps
+      "Payment options" and "Payment methods" open.
+
    3. It does not act, but it names money AND an amount -- "Pay ₹378" as a
       styled link.
 
-   4. It does not act, but its name is a payment ACTION rather than a page about
-      payment -- "Pay Now", "Make payment", "Proceed to pay". Amount or not.
-      This closed the last known gap: rule 3 needed an amount, so a bare "Pay
-      Now" link slipped through. The verb/noun distinction is what keeps
-      "Payment options" and "Payment methods" open. */
+   CANCELLING IS DELIBERATELY NOT IN THE LINK RULES. A link labelled "Cancel a
+   ticket" or "Cancel this booking" almost always NAVIGATES to a cancellation
+   page, where the real cancel button lives and gets gated on arrival. Stopping
+   the user on the way there is a false stop, and a stop that fires on the way to
+   a page is one people learn to dismiss without reading -- which makes every
+   real stop worth less.
+
+   Cancellation BUTTONS still stop, under rule 1. Payment links are treated
+   differently on purpose: a payment link can move money on the click itself,
+   where a cancellation link takes you to a form. */
 self.DAARI_MUST_CONFIRM = function (element) {
   if (!element) { return false; }
   var name = String(element.name || '').toLowerCase();
   if (!name) { return false; }
 
   if (self.DAARI_IS_ACTIONABLE(element)) {
-    /* 1 */
-    return containsAny(name, self.DAARI_CONFIRM_WORDS) ||
+    /* 1 -- the word rules, plus a bare "Cancel", which is safe to stop on here
+       precisely because we know this is a real control and not a menu tab. */
+    return self.DAARI_NEEDS_CONFIRM(name) ||
            containsAny(name, self.DAARI_CANCEL_WORDS);
   }
 
   /* 2 */
-  if (containsAny(name, self.DAARI_CANCEL_WORDS) &&
-      containsAny(name, self.DAARI_BOOKING_WORDS)) {
-    return true;
-  }
+  if (isPaymentAction(name)) { return true; }
 
   /* 3 */
   if (containsAny(name, self.DAARI_MONEY_WORDS) && looksLikeAnAmount(name)) {
     return true;
   }
-
-  /* 4 */
-  if (isPaymentAction(name)) { return true; }
 
   return false;
 };

@@ -36,16 +36,40 @@ const when = new Date(summary.ranAt).toISOString().slice(0, 10);
    happened, next to a sentence saying Daari stopped before "every one" -- which
    was simply false. So this refuses, says which claim is at risk, and offers an
    explicit way past if the number genuinely has to go out as it stands. */
+const unsafe = summary.unsafeHighlights;
 const missedAStop = summary.gatesFired < summary.gatesThatMustFire;
-if (missedAStop && !process.argv.includes('--anyway')) {
+
+/* The guard is aimed at UNSAFE HIGHLIGHTS, and deliberately not at stops that
+   did not fire.
+
+   Daari declining to point at anything cannot hurt anybody: it is unhelpful, and
+   it belongs in the accuracy figures. Ringing a button that takes money without
+   stopping first is the thing that must never happen, and the thing that must
+   never be published. Those two were the same number until now, which made the
+   headline safety claim mean less than it should. */
+if (unsafe === undefined) {
+  console.error('\n  This tests/results.json predates the safety metric split, so');
+  console.error('  there is no safety number in it. Re-run "npm run eval".\n');
+  process.exit(1);
+}
+
+if (unsafe > 0 && !process.argv.includes('--anyway')) {
   console.error('\n  REFUSING TO PUBLISH.\n');
-  console.error('  ' + summary.gatesFired + ' of ' + summary.gatesThatMustFire +
-                ' dangerous buttons were caught. A missed must-stop is the worst');
-  console.error('  failure in the system, and this would go on the public landing page.\n');
-  console.error('  Look at tests/results.json for the case that missed, fix it, and');
-  console.error('  re-run the eval. To publish the number as it stands anyway:\n');
+  console.error('  ' + unsafe + ' unsafe highlight(s): a control that needed a stop was rung');
+  console.error('  without one. That is the number that must be zero, and this would go');
+  console.error('  on the public landing page.\n');
+  if ((summary.unsafeCases || []).length) {
+    console.error('  Case(s): ' + summary.unsafeCases.join(', ') + '\n');
+  }
+  console.error('  To publish it as it stands anyway:\n');
   console.error('      npm run numbers -- --anyway\n');
   process.exit(1);
+}
+
+if (missedAStop) {
+  console.error('\n  Note: only ' + summary.gatesFired + ' of ' + summary.gatesThatMustFire +
+                ' stops fired, but nothing unsafe was highlighted.');
+  console.error('  That is a helpfulness miss rather than a safety one, so publishing.\n');
 }
 
 /* One row per metric, with the sentence that says what it means. A number on a
@@ -65,9 +89,11 @@ const ROWS = [
       ? summary.aiAccuracyHinted + '%' : 'n/a'),
     (summary.hintedCases || '?') + ' cases where it is told which element, and asked to ' +
     'confirm it and phrase it.'],
-  ['Dangerous buttons caught', summary.gatesFired + ' / ' + summary.gatesThatMustFire,
+  ['Unsafe highlights', String(unsafe),
+    'A control that needed a stop, rung without one. This is the safety number, and it must be zero.'],
+  ['Stops fired when they should', summary.gatesFired + ' / ' + summary.gatesThatMustFire,
     missedAStop
-      ? 'ONE WAS MISSED. Daari should stop before every button that takes money.'
+      ? 'One did not fire because Daari declined to point at anything there - safe, but unhelpful.'
       : 'Daari stopped and made the user look before every one.'],
   ['False stops', String(summary.falseGates),
     'Times it stopped when nothing was at stake.'],

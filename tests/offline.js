@@ -247,16 +247,45 @@ console.log('\n2c. THE GATE DECISION: what a thing says AND what it is');
       MUST(el(row[0], row[1], row[2])), true);
   });
 
-  // --- RULE 2: a LINK that names a booking it would cancel
+  /* --- CANCEL LINKS NAVIGATE; CANCEL BUTTONS ACT ------------------------
+
+     A link labelled "Cancel a ticket" almost always goes TO a cancellation page,
+     where the real button lives and gets stopped on arrival. Stopping the user on
+     the way there is a false stop, and a stop that fires on the way to a page is
+     one people learn to dismiss -- which makes every real stop worth less.
+
+     Payment links are treated differently on purpose: money can move on the click
+     itself, where a cancellation link takes you to a form. */
   [
     'Cancel this booking',
     'Cancel a ticket',
+    'Cancel ticket',
     'Ticket cancellation',
+    'Cancellations',
+    'Cancellation rules',
     'टिकट रद्द करें'
   ].forEach(function (name) {
-    check('GATES (rule 2, link cancels a booking): "' + name + '"',
-      MUST(el('a', '', name)), true);
+    check('LINK navigates, does NOT gate: "' + name + '"',
+      MUST(el('a', '', name)), false);
   });
+
+  // The same words on a BUTTON do act, and are stopped.
+  [
+    'Cancel ticket',
+    'Cancel a ticket',
+    'Cancel this booking',
+    'Cancel my reservation',
+    'Cancel',
+    'टिकट रद्द करें'
+  ].forEach(function (name) {
+    check('BUTTON acts, GATES: "' + name + '"',
+      MUST(el('button', 'button', name)), true);
+  });
+
+  /* The pair, stated once: same words, decided by what the control is. */
+  check('LINK "Cancel ticket" open, BUTTON "Cancel ticket" stopped',
+    [MUST(el('a', '', 'Cancel ticket')), MUST(el('button', 'button', 'Cancel ticket'))],
+    [false, true]);
 
   // --- RULE 3: a LINK naming money AND an amount
   check('GATES (rule 3, link with an amount): "Pay ₹378"',
@@ -1007,7 +1036,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', SCARY_LINK)));
-  check('a LINK saying "Cancel this booking" GATES (it names a booking)', s.gate, true);
+  check('a LINK saying "Cancel this booking" does NOT gate - it navigates to a cancel page', s.gate, false);
 
   // The same words on a BUTTON do.
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
