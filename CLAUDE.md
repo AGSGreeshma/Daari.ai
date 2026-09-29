@@ -139,3 +139,20 @@ Daari is built **phase by phase**, never all at once.
 - Then **stop and wait** for the next prompt.
 - Keep code simple and commented. Small files.
 - If a phase prompt conflicts with this file, **ask before proceeding** — do not silently pick one.
+
+- **Never replace a region of a file without reading it first.**
+
+  This has cost three separate shipped bugs, all the same shape: a script replaced a block of code
+  between two markers, the block turned out to contain something still in use, and the callers were
+  left pointing at nothing. `resolveByName` threw on every page Daari loaded on. `acceptGoal` killed
+  the "Yes, go" button. `startFlow` killed "Start demo on this page". Every one parsed perfectly, so
+  nothing noticed until it was in front of a real user.
+
+  Read what is there before writing over it. Splicing by marker is not a substitute for looking.
+
+- **Run `npm test` — including the lint and the smoke tests — before every commit.**
+
+  Not after, not "it only changed a comment". `tests/lint.js` catches calls to functions that no
+  longer exist and `tests/smoke-panel.js` presses the panel's buttons; between them they cover the
+  failure that `node --check` cannot see, which is the failure that has actually reached users. Both
+  run first in the suite precisely so there is no excuse for skipping them.
