@@ -78,7 +78,8 @@ const SYSTEM_PROMPT = [
   '   once the boxes are filled.',
   '   If "Already done" lists nothing, assume nothing has been done yet and the',
   '   user is at the very beginning.',
-  '   BUT: if a known route is given below, it OVERRIDES all of this ordering.',
+  '   BUT: if a known route names an element below, it OVERRIDES all of this',
+  '   ordering -- see the route instructions in the next message.',
   '   Many sites pre-fill boxes with a default, so "filled" does not mean the',
   '   user has checked it or meant it. A box the route names is the next step',
   '   even when it already has something in it.',
@@ -117,10 +118,11 @@ const RESPONSE_SCHEMA = {
     /* goal_supported is FIRST on purpose: the model fills the fields in
        order, so it has to decide whether the page can do the job before it has
        committed to an element. Asking afterwards gets a rationalisation. */
-    required: ['goal_supported', 'elementIndex', 'speech', 'done_when',
+    required: ['goal_supported', 'hint_ok', 'elementIndex', 'speech', 'done_when',
                'stopAndConfirm', 'confidence'],
     properties: {
       goal_supported: { type: 'boolean' },
+      hint_ok: { type: 'boolean' },
       elementIndex: { type: ['integer', 'null'] },
       speech: { type: 'string' },
       done_when: { type: 'string', enum: DONE_WHEN },
@@ -146,11 +148,29 @@ function buildUserPrompt(body) {
 
   if (body.recipeStep) {
     lines.push('');
-    lines.push('THE NEXT STEP OF A KNOWN ROUTE through this site is an element');
-    lines.push('labelled one of: ' + (body.recipeStep.look_for || []).join(', '));
-    lines.push('If any element below matches one of those labels, THAT is your');
-    lines.push('answer. Do not substitute a later step you think is more useful.');
-    lines.push('Only ignore this if no element below plausibly matches it.');
+    var hinted = body.recipeStep.expectedElementIndex;
+    if (typeof hinted === 'number' && hinted >= 0) {
+      var hintedElement = body.elements.filter(function (e) { return e.i === hinted; })[0];
+      lines.push('THE ELEMENT IS ALREADY DECIDED FOR THIS STEP.');
+      lines.push('A known route through this site says the next thing to do is');
+      lines.push('index ' + hinted + ': "' + (hintedElement ? hintedElement.name : '?') + '".');
+      lines.push('');
+      lines.push('So you are NOT searching. Do this instead:');
+      lines.push('  - set elementIndex to ' + hinted);
+      lines.push('  - set hint_ok true');
+      lines.push('  - write the sentence for THAT element, in the language asked for');
+      lines.push('');
+      lines.push('Set hint_ok FALSE only if index ' + hinted + ' is plainly wrong for');
+      lines.push('this step -- not merely because you would have chosen a different');
+      lines.push('one, and not because the box already has something in it. Many');
+      lines.push('sites pre-fill boxes with a default, and a pre-filled box the route');
+      lines.push('names is still the next step.');
+    } else {
+      lines.push('A known route expects an element labelled one of: ' +
+                 (body.recipeStep.look_for || []).join(', '));
+      lines.push('Nothing below matched it, so choose the closest thing yourself');
+      lines.push('and set hint_ok true.');
+    }
     if (body.recipeStep.sensitive) {
       lines.push('This step is a code or card number: tell them to type it themselves.');
     }
@@ -334,9 +354,11 @@ module.exports = async (req, res) => {
   /* Default to true only when the field is genuinely absent (an older model in
      json_object mode). An explicit false is always honoured. */
   const achievable = answer.goal_supported !== false;
+  const hintOk = answer.hint_ok !== false;
 
   res.status(200).json({
     goal_supported: achievable,
+    hint_ok: hintOk,
     elementIndex: achievable && realIndex ? index : null,
     speech: String(answer.speech || '').slice(0, 300),
     done_when: DONE_WHEN.indexOf(answer.done_when) !== -1 ? answer.done_when : 'clicked',

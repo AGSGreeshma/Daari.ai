@@ -82,9 +82,20 @@ var YDR = (function () {
   /* Each getter has sensible defaults, so ANY page can be opened directly
      without walking the whole flow first. That matters for testing Daari:
      we can load payment.html on its own and it still renders properly. */
+  /* From and To start EMPTY on purpose.
+
+     They used to default to Secunderabad and Kazipet, which made the search page
+     render pre-filled every time. That quietly broke the guided walk: the first
+     two steps wait for a box to be filled, the boxes were already filled, so both
+     steps completed instantly and Daari jumped straight to the Class dropdown.
+     Two steps of the demo disappeared, and it looked like Daari skipping rather
+     than the page having lied about its state.
+
+     The other defaults stay, because a class and a quota genuinely do have
+     sensible starting values and nothing waits on them being empty. */
   function journey() {
     return load('journey', {
-      from: 'Secunderabad', to: 'Kazipet', date: '', cls: 'SL', quota: 'General'
+      from: '', to: '', date: '', cls: 'SL', quota: 'General'
     });
   }
 

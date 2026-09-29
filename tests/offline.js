@@ -210,42 +210,90 @@ console.log('\n2b. The confirm gate word rules');
   check('KNOWN GAP: a bare "Cancel" does not gate', NC('Cancel'), false);
 }
 
-console.log('\n2c. The gate fires only on things that ACT, not on links');
+console.log('\n2c. THE GATE DECISION: what a thing says AND what it is');
 {
+  const MUST = ctx.self.DAARI_MUST_CONFIRM;
   const ACT = ctx.self.DAARI_IS_ACTIONABLE;
-  const NC = ctx.self.DAARI_NEEDS_CONFIRM;
+  const el = (tag, type, name) => ({ tag: tag, type: type, name: name });
 
-  // Actionable: it does something.
-  check('<button> is actionable', ACT({ tag: 'button', type: 'submit' }), true);
-  check('<button type=button> is actionable', ACT({ tag: 'button', type: 'button' }), true);
-  check('<input type=submit> is actionable', ACT({ tag: 'input', type: 'submit' }), true);
-  check('<input type=image> is actionable', ACT({ tag: 'input', type: 'image' }), true);
-  check('a link with role=button is actionable', ACT({ tag: 'a', type: 'button' }), true);
+  // --- what counts as something that ACTS
+  check('<button> acts', ACT(el('button', 'submit', 'x')), true);
+  check('<input type=submit> acts', ACT(el('input', 'submit', 'x')), true);
+  check('<input type=image> acts', ACT(el('input', 'image', 'x')), true);
+  check('a link with role=button acts', ACT(el('a', 'button', 'x')), true);
+  check('a plain link does not', ACT(el('a', '', 'x')), false);
+  check('a tab does not', ACT(el('a', 'tab', 'x')), false);
+  check('a text box does not', ACT(el('input', 'text', 'x')), false);
+  check('a dropdown does not', ACT(el('select', '', 'x')), false);
 
-  // Not actionable: it goes somewhere, or it holds text.
-  check('a plain link is not', ACT({ tag: 'a', type: '' }), false);
-  check('a tab is not', ACT({ tag: 'a', type: 'tab' }), false);
-  check('a text box is not', ACT({ tag: 'input', type: 'text' }), false);
-  check('a dropdown is not', ACT({ tag: 'select', type: '' }), false);
-  check('nothing at all is not', ACT(null), false);
+  // --- RULE 1: it acts, and its words are dangerous
+  [
+    ['button', 'submit', 'Pay ₹378'],
+    ['button', 'submit', 'Submit application'],
+    ['button', 'button', 'Confirm booking'],
+    ['input', 'submit', 'Proceed to payment'],
+    ['a', 'button', 'Checkout'],
+    ['button', 'button', 'Cancel booking'],
+    // A BARE "Cancel" on a real control now gates. That was the known gap, and
+    // it is safe to close here precisely because we know this is a button and
+    // not a menu tab.
+    ['button', 'button', 'Cancel'],
+    ['button', 'button', 'रद्द करें']
+  ].forEach(function (row) {
+    check('GATES (rule 1, it acts): <' + row[0] + '> "' + row[2] + '"',
+      MUST(el(row[0], row[1], row[2])), true);
+  });
 
-  /* THE CASE THAT DROVE THIS. A link called "Cancellations" navigates to a page
-     about cancelling; it cancels nothing. A BUTTON called "Cancel booking"
-     cancels a booking. Same words, opposite consequences. No snapshot of the
-     practice site has such a button, so it is constructed here where it can be
-     exact. */
-  const link = { tag: 'a', type: '', name: 'Cancel a ticket' };
-  const button = { tag: 'button', type: 'button', name: 'Cancel booking' };
+  // --- RULE 2: a LINK that names a booking it would cancel
+  [
+    'Cancel this booking',
+    'Cancel a ticket',
+    'Ticket cancellation',
+    'टिकट रद्द करें'
+  ].forEach(function (name) {
+    check('GATES (rule 2, link cancels a booking): "' + name + '"',
+      MUST(el('a', '', name)), true);
+  });
 
-  check('LINK "Cancel a ticket": words match but it does NOT gate',
-    ACT(link) && NC(link.name), false);
-  check('  (the words alone would have matched)', NC(link.name), true);
-  check('BUTTON "Cancel booking": GATES', ACT(button) && NC(button.name), true);
+  // --- RULE 3: a LINK naming money AND an amount
+  check('GATES (rule 3, link with an amount): "Pay ₹378"',
+    MUST(el('a', '', 'Pay ₹378')), true);
+  check('GATES (rule 3): "Pay 500 now"', MUST(el('a', '', 'Pay 500 now')), true);
 
-  const payButton = { tag: 'button', type: 'submit', name: 'Pay ₹378' };
-  const payLink = { tag: 'a', type: '', name: 'Payment options' };
-  check('BUTTON "Pay ₹378": GATES', ACT(payButton) && NC(payButton.name), true);
-  check('LINK "Payment options": does not gate', ACT(payLink) && NC(payLink.name), false);
+  // --- what must NOT gate
+  [
+    ['a', '', 'Cancellations'],               // the menu tab that drove all this
+    ['a', '', 'Cancellation rules'],
+    ['a', '', 'Cancellation policy'],
+    ['a', '', 'Payment options'],             // money word, no amount, just a link
+    ['a', '', 'Net banking'],
+    ['a', '', 'Book Ticket'],
+    ['a', '', 'PNR Status'],
+    ['input', 'text', 'Card number *'],
+    ['input', 'text', 'From station *'],
+    ['button', 'submit', 'Search Trains'],
+    ['button', 'button', 'Send OTP'],
+    ['select', '', 'Class'],
+    ['button', 'button', '']
+  ].forEach(function (row) {
+    check('does NOT gate: <' + row[0] + '> "' + (row[2] || '(no name)') + '"',
+      MUST(el(row[0], row[1], row[2])), false);
+  });
+
+  check('nothing at all does not gate', MUST(null), false);
+
+  /* THE PAIR THAT JUSTIFIES THE WHOLE DESIGN. The same word, opposite
+     consequences, settled by what the control IS rather than what it says. */
+  check('LINK "Cancellations" stays open, BUTTON "Cancel" is stopped',
+    [MUST(el('a', '', 'Cancellations')), MUST(el('button', 'button', 'Cancel'))],
+    [false, true]);
+
+  /* THE GAP THAT REMAINS, recorded so it reads as a decision rather than an
+     oversight. Rule 3 needs an amount; a bare "Pay Now" link has none, and
+     catching it would also stop every "Payment options" link. */
+  check('KNOWN GAP: a bare "Pay Now" LINK is not caught',
+    MUST(el('a', '', 'Pay Now')), false);
+  check('  but the same words on a button are', MUST(el('button', 'button', 'Pay Now')), true);
 }
 
 console.log('\n3. The AI path: model agrees with the recipe');
@@ -310,12 +358,12 @@ console.log('\n4. THE VALIDATION GATE');
   // Timeout -> recipe wins.
   s = await decideWith(null, 'abort');
   check('timeout -> fallback', s.path, 'fallback');
-  check('  reason', s.why, 'timeout');
+  check('  reason names both attempts', s.why, 'timeout, then timeout');
 
   // API down entirely -> recipe wins. THIS IS THE DEMO SAFETY NET.
   s = await decideWith(null, 500);
   check('API 500 -> fallback', s.path, 'fallback');
-  check('  reason', s.why, 'http 500');
+  check('  reason names both attempts', s.why, 'http 500, then http 500');
   check('  still points at the right element', s.index, 4);
   check('  still speaks the right sentence', s.say, RECIPE_SAY_EN);
 }
@@ -453,7 +501,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', SCARY_LINK)));
-  check('a LINK saying "Cancel this booking" does not gate', s.gate, false);
+  check('a LINK saying "Cancel this booking" GATES (it names a booking)', s.gate, true);
 
   // The same words on a BUTTON do.
   storage.session = {}; chrome.storage.session = makeArea(storage.session);

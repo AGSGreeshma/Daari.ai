@@ -41,16 +41,30 @@ Every module maps to one of those five words. If a piece of code doesn't, questi
    button input always reports `filled: false` — a button is not a box. Enforced in
    `accessibleName()` / `isFilled()` in `extension/content/overlay.js` via one explicit list of
    those four types. If you widen that list, you have broken rule 2.
-3. **Safety rules are enforced in code, never delegated to the model.** The stop-before-payment gate
-   fires on a keyword check in our own code. The model's `stopAndConfirm` flag can only ever *add* a
-   stop, never remove one.
+3. **Safety rules are enforced in code, never delegated to the model.** `DAARI_MUST_CONFIRM` in
+   `extension/safety.js` is the single decision, and it reads the element's **kind** as well as its
+   name — because a link called "Cancellations" goes to a help page while a *button* called "Cancel"
+   cancels something. Three rules: an actionable control with dangerous words; a link naming a booking
+   it would cancel; a link naming money *with an amount*.
+
+   **The model's `stopAndConfirm` counts only when its own answer was accepted.** Then it may *add* a
+   stop and never remove one. When the validation gate has discarded its answer, its opinion goes with
+   it — we are no longer pointing where it said. Delegating stop-*invention* to the model turned out to
+   break this rule just as surely as letting it remove one: in the first live run it asked to stop on
+   "From station" and "PNR number", and a stop that fires on every step is a stop nobody reads.
 4. **Before payment, final submit or cancel-confirm, Daari stops** and asks the user to check the
    details, and waits for spoken confirmation.
 5. **The OpenAI key lives only in Vercel environment variables or a local `.env`.** Never in the
    extension, never committed. `api/` is the only code that may touch it.
-6. **Budget is $5 total.** Smallest mini model, text-only by default, screenshots only when stuck
-   (max 2 per session), hard cap of 25 AI steps per session. A $5 hard limit is also set in the
-   OpenAI dashboard — the only guard a bug in our code cannot bypass.
+6. **Budget is $5 total.** Smallest mini model, **text only**, hard cap of 25 AI calls per session
+   with one retry allowed for a transient failure. A $5 hard limit is also set in the OpenAI
+   dashboard — the only guard a bug in our code cannot bypass. Server-side guards in `api/_guard.js`
+   stop the public endpoints being used to spend it.
+
+   *This rule used to allow "screenshots when stuck, max 2 per session". That was never built, and
+   the claim is removed rather than left standing: a vision call costs many times a text call against
+   a $5 budget, and a spec that describes behaviour which does not exist is worse than a shorter
+   spec. Daari is text-only, and says "I am not sure" instead of looking harder.*
 7. **Free tiers only.** No paid services.
 
 ## The failure voice
@@ -89,7 +103,15 @@ instruction — it destroys the trust the whole product depends on.
 - **Microphone permission must be granted once, to Daari, not per website.** So the voice surface
   lives at the `chrome-extension://` origin — an offscreen document, or the side panel if the
   Phase 3 spike shows `SpeechRecognition` does not work offscreen.
-- **AI runs on every step**, even when a recipe matches; the recipe is passed in as a hint.
+- **AI runs on every step**, even when a recipe matches. But on a recipe-backed step the model is
+  **told which element it is** and asked to confirm it (`hint_ok`) and write the sentence, rather than
+  find it. Asking it to choose independently was the single biggest source of disagreement in the
+  first live run: it picked the submit button every time, answering the whole goal in one move instead
+  of naming the next step. It can still say `hint_ok: false` if the recipe looks stale, and that is
+  logged — but the recipe wins, because the recipe is the safety net and the model is the thing being
+  checked.
+- **Confidence bar is 0.45 with a recipe, 0.7 without.** A recipe-backed answer has a second opinion
+  behind it; an unaccompanied one has only itself.
 - **AI timeout 6s, with a spoken "One moment…" filler after 1.5s** so the user never faces silence.
 - **Validation gate compares element *indices*.** The recipe step is resolved to a concrete element
   index locally *before* the AI call; the AI's answer is discarded on index mismatch, timeout,

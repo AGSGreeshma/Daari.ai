@@ -61,6 +61,14 @@ self.DAARI_STRINGS = {
       te: 'మీరు వెనక్కి వచ్చారు - ఇక్కడ నుండి కొనసాగిద్దాం.'
     },
 
+    /* The Back button's counterpart: the user jumped ahead, usually by pressing
+       Forward after having gone back. */
+    wentForward: {
+      en: 'You moved ahead - let us carry on from here.',
+      hi: 'आप आगे आ गए - यहाँ से आगे चलिए।',
+      te: 'మీరు ముందుకు వచ్చారు - ఇక్కడ నుండి కొనసాగిద్దాం.'
+    },
+
     notGuiding: {
       en: 'Not guiding right now',
       hi: 'अभी मदद नहीं चल रही',

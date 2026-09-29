@@ -204,10 +204,20 @@ Stated honestly, because a judge will find them anyway.
 - **Strict Content-Security-Policy sites** may block the ring. The stylesheet is applied as a
   constructable stylesheet specifically to survive most of these.
 - **CAPTCHAs.** Daari says "type the letters yourself" and will not read or solve one.
-- **A bare "Cancel" button does not trip the confirm gate** — the rule needs a cancel word *and* a
-  booking word, which is what keeps the "Cancellations" menu tab from stopping the user. Recorded as a
-  known gap in the harness.
-- **Going back works; going forward with the browser's Forward button does not** move the flow along.
+- **A bare "Pay Now" *link* does not trip the confirm gate.** The gate fires on anything that acts (a
+  button, or a link with `role="button"`), and on an ordinary link only when it names a booking it
+  would cancel or names money *with an amount*. "Pay ₹378" as a link is caught; "Pay Now" is not.
+  Catching it would also stop every "Payment options" link, and a stop that fires on help pages is one
+  people learn to dismiss. Recorded as a known gap in the harness.
+- **Four identical "Book" buttons cannot be told apart.** Daari rings the first and says "next to the
+  train you want". Honest, but it means Daari cannot act on *which* train you meant — recipes have no
+  way to disambiguate repeated controls.
+- **Text only.** Daari never takes a screenshot. An earlier draft of `CLAUDE.md` allowed two per
+  session when stuck; it was never built and the claim has been removed rather than left standing. A
+  vision call costs many times a text call against a $5 budget, so Daari says "I am not sure" instead
+  of looking harder.
+- **The per-IP rate limit is per server instance.** Vercel may run several, so the real limit is higher
+  than the number in `api/_guard.js`. Fixing it properly needs a shared store, which needs a paid tier.
 - **Not a screen reader.** Daari assumes you can see the screen. Blind users are better served by an
   actual screen reader, and saying so is more useful than pretending otherwise.
 

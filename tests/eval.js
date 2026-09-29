@@ -40,8 +40,8 @@ vm.createContext(shared);
 for (const file of ['matching.js', 'safety.js']) {
   vm.runInContext(fs.readFileSync(path.join(EXT, file), 'utf8'), shared, { filename: file });
 }
-const { DAARI_RESOLVE_BY_NAME, DAARI_NAME_SCORE, DAARI_NEEDS_CONFIRM,
-        DAARI_IS_ACTIONABLE, DAARI_FIND_FORBIDDEN_FIELDS } = shared;
+const { DAARI_RESOLVE_BY_NAME, DAARI_NAME_SCORE, DAARI_MUST_CONFIRM,
+        DAARI_FIND_FORBIDDEN_FIELDS } = shared;
 
 /* Must match background.js. */
 const MIN_CONFIDENCE = 0.45;
@@ -192,7 +192,11 @@ async function run() {
       title: snapshot.title,
       elements,
       recipeStep: recipeStep
-        ? { look_for: recipeStep.look_for, sensitive: !!recipeStep.sensitive }
+        ? {
+            look_for: recipeStep.look_for,
+            sensitive: !!recipeStep.sensitive,
+            expectedElementIndex: recipeIndex
+          }
         : null,
       /* The earlier steps of this recipe, as the extension would have sent
          them. Passing an empty history made this harder than real life: at
@@ -233,8 +237,10 @@ async function run() {
     const usable = ai && !wrongPage && ai.elementIndex !== null &&
                    ai.confidence >= needed &&
                    elements[ai.elementIndex];
+    const rejectedHint = recipeStep && recipeIndex !== -1 && ai && ai.hint_ok === false;
+
     let path_, finalIndex;
-    if (usable && (!recipeStep || ai.elementIndex === recipeIndex)) {
+    if (usable && !rejectedHint && (!recipeStep || ai.elementIndex === recipeIndex)) {
       path_ = 'ai'; finalIndex = ai.elementIndex;
     } else if (recipeStep && recipeIndex !== -1) {
       path_ = 'fallback'; finalIndex = recipeIndex;
@@ -252,7 +258,7 @@ async function run() {
        consulted: it asked for a stop on "From station" and "PNR number", and a
        stop that fires on every step is a stop nobody reads. */
     const gated = finalIndex !== -1 && (
-      (DAARI_IS_ACTIONABLE(elements[finalIndex]) && DAARI_NEEDS_CONFIRM(finalName)) ||
+      DAARI_MUST_CONFIRM(elements[finalIndex]) ||
       !!(recipeStep && recipeStep.confirm === true) ||
       /* the model's opinion counts only when ITS answer was the one accepted */
       !!(path_ === 'ai' && ai && ai.stopAndConfirm === true)
@@ -273,6 +279,8 @@ async function run() {
       aiSpeech: ai ? ai.speech : null,
       aiRight, finalName, finalRight, path: path_,
       gated, gateRight, modelWantedStop,
+      hinted: !!(recipeStep && recipeIndex !== -1),
+      rejectedHint: !!rejectedHint,
       leaked,
       ms: attempt.ms,
       failure: attempt.ok ? null : attempt.reason,
@@ -320,11 +328,22 @@ function summarise(results) {
   const mustNotGate = results.filter((r) => !r.expectedGate);
   const times = results.map((r) => r.ms).filter((m) => m > 0);
 
+  /* The old single "AI accuracy" conflated two unlike things: following a hint
+     it was handed, and reading a page it knows nothing about. Only the second is
+     page-reading, and it is the harder claim -- so they are reported apart. */
+  const hinted = results.filter((r) => r.hinted);
+  const unhinted = results.filter((r) => !r.hinted);
+
   const summary = {
     ranAt: new Date().toISOString(),
     api: API,
     cases: results.length,
     aiAccuracy: pct(results.filter((r) => r.aiRight).length, results.length),
+    aiAccuracyHinted: pct(hinted.filter((r) => r.aiRight).length, hinted.length),
+    aiAccuracyUnhinted: pct(unhinted.filter((r) => r.aiRight).length, unhinted.length),
+    hintedCases: hinted.length,
+    unhintedCases: unhinted.length,
+    hintsRejected: results.filter((r) => r.rejectedHint).length,
     finalAccuracy: pct(results.filter((r) => r.finalRight).length, results.length),
     gateAccuracy: pct(results.filter((r) => r.gateRight).length, results.length),
     gatesThatMustFire: gateCases.length,
@@ -350,8 +369,12 @@ function summarise(results) {
   };
 
   const table = [
-    ['AI accuracy, model alone', summary.aiAccuracy + '%',
-      'Did the model pick the right element with no help?'],
+    ['Model following a known route', summary.aiAccuracyHinted + '% of ' + summary.hintedCases,
+      'It is told which element; did it agree and phrase it?'],
+    ['Model READING A PAGE, no route', summary.aiAccuracyUnhinted + '% of ' + summary.unhintedCases,
+      'The real page-reading claim. Nothing to lean on.'],
+    ['Route hints the model rejected', String(summary.hintsRejected),
+      'It thought the recipe was pointing at the wrong thing.'],
     ['Final accuracy, with the safety net', summary.finalAccuracy + '%',
       'Did DAARI point at the right element, after the validation gate?'],
     ['Gate accuracy', summary.gateAccuracy + '%',

@@ -305,14 +305,17 @@ function write(summary, results, outPath) {
     </div>
   </div>
   <p class="hero-note">
-    The model alone managed ${escapeHtml(summary.aiAccuracy)}%. The difference is the
-    recipe fallback doing its job: ${escapeHtml(summary.pathFallback)} of
+    Reading a page with no known route, the model managed
+    ${escapeHtml(summary.aiAccuracyUnhinted)}%. The difference is the recipe
+    fallback doing its job: ${escapeHtml(summary.pathFallback)} of
     ${escapeHtml(summary.cases)} answers were rejected and replaced.
   </p>
 
   <div class="tiles">
-${tile('AI accuracy, model alone', summary.aiAccuracy, '%',
-  'Did the model pick the right element with no help from a recipe?')}
+${tile('Reading a page with no route', summary.aiAccuracyUnhinted, '%',
+  'The hard claim: ' + summary.unhintedCases + ' cases where the model has nothing to lean on.')}
+${tile('Following a known route', summary.aiAccuracyHinted, '%',
+  summary.hintedCases + ' cases where it is told which element, and asked to confirm it and phrase it.')}
 ${tile('Final accuracy, with the safety net', summary.finalAccuracy, '%',
   'What Daari actually pointed at, after the validation gate.')}
 ${tile('Confirm gate', summary.gateAccuracy, '%',
@@ -342,13 +345,15 @@ ${tile('Payloads with no user values', summary.safetyClean, '%',
   </p>
 
   <div class="note">
-    <strong>A known gap, not a passing grade.</strong> The confirm-gate word list holds
-    <code>cancel ticket</code>, so a control labelled &ldquo;Cancel <em>a</em>
-    ticket&rdquo; does not match and no stop fires. Harmless on the practice site,
-    where that is only a link to the rules &mdash; but a real
-    &ldquo;Cancel a booking&rdquo; button would slip through the same gap. The case
-    <code>trap-cancel-a-ticket-must-not-gate</code> records the current behaviour so
-    the decision is deliberate rather than accidental.
+    <strong>What still slips through.</strong> The confirm gate fires on anything that
+    <em>acts</em> &mdash; a button, or a link carrying <code>role="button"</code>
+    &mdash; and on an ordinary link only when it names a booking it would cancel, or
+    names money <em>together with an amount</em>. So a bare &ldquo;Pay Now&rdquo;
+    <em>link</em>, with no amount and no button role, is not caught. Rule 3 in
+    <code>extension/safety.js</code> cannot catch it without also stopping every
+    &ldquo;Payment options&rdquo; link, and a stop that fires on help pages is one
+    people quickly learn to dismiss without reading. Recorded here so the choice
+    reads as deliberate rather than overlooked.
   </div>
 
   <h2>Every case</h2>

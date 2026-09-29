@@ -113,8 +113,15 @@
   var rows = document.getElementById('trainRows');
   var line = document.getElementById('journeyLine');
 
+  /* From and To are empty until somebody searches -- they no longer default to
+     Secunderabad and Kazipet, because a pre-filled search box made the guided
+     walk skip its first two steps. So say "any station" rather than render a
+     blank if this page is opened on its own. */
+  var fromName = journey.from || 'Any station';
+  var toName = journey.to || 'any station';
+
   line.innerHTML =
-    '<strong>' + journey.from + '</strong> to <strong>' + journey.to + '</strong> &nbsp;|&nbsp; ' +
+    '<strong>' + fromName + '</strong> to <strong>' + toName + '</strong> &nbsp;|&nbsp; ' +
     YDR.niceDate(journey.date) + ' &nbsp;|&nbsp; ' +
     YDR.classByCode(journey.cls).name + ' &nbsp;|&nbsp; ' + journey.quota + ' quota ' +
     '&nbsp; <a href="index.html">Change</a>';

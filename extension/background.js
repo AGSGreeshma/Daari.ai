@@ -152,6 +152,19 @@ function firstStepOnPage(recipe, page, beforeIndex) {
   return -1;
 }
 
+/* The same thing looking the other way: the earliest step on this page among the
+   ones still ahead. Used when the browser's Forward button lands the user
+   somewhere they had already been.
+
+   Skips the immediate next step, because that case is a normal forward
+   navigation and is handled by its own rule before this one is consulted. */
+function nextStepOnPage(recipe, page, afterIndex) {
+  for (var i = afterIndex + 2; i < recipe.steps.length; i++) {
+    if (recipe.steps[i].page === page) { return i; }
+  }
+  return -1;
+}
+
 /* Move to the next step.
 
    history records only the step number, the recipe's own label for it, and the
@@ -176,7 +189,7 @@ function advance(session, recipe, url) {
    Asking the model
    ================================================================= */
 
-async function callAi(session, page, recipeStep, lang) {
+async function callAi(session, page, recipeStep, lang, hintIndex) {
   var base = self.DAARI_CONFIG && self.DAARI_CONFIG.API_BASE;
   if (!base) { return { ok: false, reason: 'no API_BASE in config.js' }; }
 
@@ -206,7 +219,19 @@ async function callAi(session, page, recipeStep, lang) {
         title: page.title,
         elements: page.elements,
         recipeStep: recipeStep
-          ? { look_for: recipeStep.look_for, sensitive: !!recipeStep.sensitive }
+          ? {
+              look_for: recipeStep.look_for,
+              sensitive: !!recipeStep.sensitive,
+              /* The element our own matcher already resolved this step to, by
+                 index into the very list being sent. On a recipe-backed step the
+                 model no longer has to FIND the element -- it confirms it and
+                 writes the sentence. Asking it to choose independently was the
+                 single biggest source of disagreement in the first live run: it
+                 picked the submit button every time, answering the whole goal in
+                 one move instead of naming the next step. -1 when the recipe
+                 could not resolve, in which case it does have to choose. */
+              expectedElementIndex: typeof hintIndex === 'number' ? hintIndex : -1
+            }
           : null,
         history: session.history.slice(-8).map(function (h) {
           return h.label || ('step ' + (h.step + 1));
@@ -314,7 +339,19 @@ async function decideStep(session, page) {
     reason = 'budget of ' + MAX_AI_CALLS + ' calls used up';
   } else if (elements.length) {
     session.aiCallCount += 1;
-    var attempt = await callAi(session, page, recipeStep, lang);
+    var attempt = await callAi(session, page, recipeStep, lang, recipeIndex);
+
+    /* One retry, and only for a failure that might not happen twice: a network
+       blip, a 5xx, a timeout. Never for a 4xx, which means the request itself
+       was wrong and sending it again would just spend the budget twice. */
+    if (!attempt.ok && session.aiCallCount < MAX_AI_CALLS &&
+        /^(timeout|http 5|TypeError|Error)/.test(attempt.reason)) {
+      session.aiCallCount += 1;
+      var second = await callAi(session, page, recipeStep, lang, recipeIndex);
+      if (second.ok) { attempt = second; }
+      else { attempt.reason = attempt.reason + ', then ' + second.reason; }
+    }
+
     if (attempt.ok) { ai = attempt.answer; } else { reason = attempt.reason; }
   } else {
     reason = 'nothing on the page to choose from';
@@ -347,7 +384,14 @@ async function decideStep(session, page) {
                ai.confidence >= needed &&
                elements[ai.elementIndex];
 
-  if (usable && (!recipeStep || ai.elementIndex === recipeIndex)) {
+  /* On a recipe-backed step the model was TOLD which element it is, so the only
+     question is whether it agreed. hint_ok false means it thinks the recipe is
+     pointing at the wrong thing -- we believe the recipe anyway, because the
+     recipe is the safety net and the model is the thing being checked, but the
+     disagreement is logged so a stale recipe shows up in the numbers. */
+  var rejectedHint = recipeStep && recipeIndex !== -1 && ai && ai.hint_ok === false;
+
+  if (usable && !rejectedHint && (!recipeStep || ai.elementIndex === recipeIndex)) {
     payload.index = ai.elementIndex;
     payload.say = ai.speech;
     payload.done_when = ai.done_when || (recipeStep && recipeStep.done_when) || 'clicked';
@@ -360,7 +404,8 @@ async function decideStep(session, page) {
     payload.done_when = recipeStep.done_when || 'clicked';
     payload.path = 'fallback';
     payload.why = ai
-      ? (wrongPage ? 'model says the goal cannot be done here'
+      ? (rejectedHint ? 'model rejected the recipe hint'
+          : wrongPage ? 'model says the goal cannot be done here'
           : ai.elementIndex === null ? 'model found nothing'
           : ai.confidence < needed ? 'model unsure (' + ai.confidence + ' < ' + needed + ')'
           : 'model chose a different element')
@@ -425,14 +470,16 @@ async function decideStep(session, page) {
 function gateApplies(element, recipeStep, acceptedAi) {
   if (!element) { return false; }
 
-  if (self.DAARI_IS_ACTIONABLE(element) && self.DAARI_NEEDS_CONFIRM(element.name)) {
-    return true;
-  }
+  /* One call, three rules, all in safety.js: an actionable control with
+     dangerous words, a link that cancels something booked, or a link naming
+     money AND an amount. */
+  if (self.DAARI_MUST_CONFIRM(element)) { return true; }
   if (recipeStep && recipeStep.confirm === true) { return true; }
   if (acceptedAi && acceptedAi.stopAndConfirm === true) { return true; }
 
   return false;
 }
+
 
 /* A gated step carries NO element index, so the page cannot ring the button
    even if it wanted to. */
@@ -580,6 +627,20 @@ var HANDLERS = {
           session.awaitingConfirm = null;
           session.finished = false;
           notice = 'wentBack';
+
+        } else {
+          /* Not behind us, and not the next step either -- so the user has
+             jumped AHEAD, almost always with the browser's Forward button after
+             going back. Pick it up from the first step on that page rather than
+             sitting on a step whose element is nowhere to be found. */
+          var forwardTo = nextStepOnPage(recipe, here, session.stepIndex);
+          if (forwardTo !== -1) {
+            session.stepIndex = forwardTo;
+            session.confirmedStep = null;
+            session.awaitingConfirm = null;
+            session.finished = false;
+            notice = 'wentForward';
+          }
         }
       }
     }

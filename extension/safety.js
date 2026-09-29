@@ -1,52 +1,44 @@
 /* The confirm gate -- the one place that decides "stop and make them look".
 
    CLAUDE.md rule 3: safety rules are enforced in code, never delegated to the
-   model, and never to a flag that whoever wrote a flow might forget to set.
-   So this check runs against the accessible name of the element Daari is
-   ABOUT to point at, every single time, no matter where the step came from --
-   a hardcoded flow today, a recipe in Phase 6, a model's answer in Phase 5.
+   model, and never to a flag that whoever wrote a flow might forget to set. So
+   this runs against the accessible name AND THE KIND of the element Daari is
+   about to point at, every single time, wherever the step came from.
 
-   Consequence worth knowing: the practice site's "Continue to Payment" button
-   trips this as well as "Pay". That is the gate working, not misfiring. It
-   caught a button no flow author marked as dangerous.
+   THE ENTRY POINT IS DAARI_MUST_CONFIRM(element). It takes the whole element,
+   not just its name, because what a control IS matters as much as what it says:
+   a link called "Cancellations" goes to a page about cancelling, while a BUTTON
+   called "Cancel" cancels something.
 
-   Loaded by both the service worker and the content script. Uses self, not
-   window, because a service worker has no window.
+   Loaded by the service worker and the content script. Uses self, not window,
+   because a service worker has no window.
 
-   If you widen this list, you are widening what Daari will stop for. If you
-   narrow it, you are removing a stop the user was relying on. Do neither
-   casually. */
+   If you widen these lists you widen what Daari stops for. If you narrow them
+   you remove a stop somebody was relying on. Do neither casually, and add a
+   case to tests/offline.js either way. */
 
-/* RULE ONE: any of these words on its own is enough to stop.
+/* ---------------------------------------------------------------- vocabulary */
 
-   Substring matching on purpose. "Pay ₹378", "Proceed to payment" and "Submit
-   application" must all trip it. A false stop costs the user three seconds; a
-   missed stop can cost them money. */
+/* Money, and finality. Any one of these is enough, on a real control. */
 self.DAARI_CONFIRM_WORDS = [
   'pay',
   'payment',
   'submit',
   'confirm',
+  'checkout',
   'చెల్లించు',
   'भुगतान'
 ];
 
-/* RULE TWO: cancelling something booked.
+/* The subset that specifically means money changing hands. Used for the narrow
+   link rule further down. */
+self.DAARI_MONEY_WORDS = [
+  'pay',
+  'payment',
+  'చెల్లించు',
+  'भुगतान'
+];
 
-   "cancel ticket" used to be a single entry in the list above, and it had a
-   hole you could drive through: "Cancel a ticket" did not match, because of the
-   "a". So do "Cancel this booking", "Ticket cancellation" and every other
-   natural phrasing.
-
-   So cancelling now needs a word from EACH list, in any order, with anything in
-   between. That catches the real phrasings while leaving the "Cancellations"
-   menu tab alone -- a tab that merely lists the rules has no booking word in
-   it, and stopping the user from reading a help page would be a false stop for
-   no gain.
-
-   The trade is deliberate: "Cancellations" not stopping is correct, and a bare
-   "Cancel" button somewhere with no booking word in its label would still slip
-   through. If that turns up on a real site, add its wording here. */
 self.DAARI_CANCEL_WORDS = [
   'cancel',        /* covers cancel, cancels, cancelling, cancellation */
   'रद्द',
@@ -64,18 +56,16 @@ self.DAARI_BOOKING_WORDS = [
   'రిజర్వేషన్'
 ];
 
-/* Is this something that ACTS, rather than something that goes somewhere?
+/* ------------------------------------------------------------- what it IS */
 
-   The gate fires only on actionable controls. A link or a tab labelled
-   "Cancellations" navigates to a page about cancelling; it does not cancel
-   anything, and stopping the user from reading it is a false stop. A BUTTON
-   labelled "Cancel booking" does cancel something.
+/* Does this thing ACT, or does it just go somewhere?
 
-   The trade, stated plainly: a site where "Pay Now" is a styled <a> rather than
-   a button would not be gated. That is a real risk on real sites, and the
-   mitigation is that such a link almost always carries role="button", which
-   counts below. If a site is found where it does not, this is the function to
-   revisit -- not the word list. */
+   The distinction earns its place on the practice site alone: the menu tab
+   "Cancellations" is a link to a help page and cancels nothing, while a button
+   reading "Cancel booking" cancels a booking. Same words, opposite consequences.
+
+   For anything that is not an input, serializePage puts the ARIA role in "type",
+   so a link dressed as a button is treated as a button. */
 self.DAARI_ACTIONABLE_INPUT_TYPES = ['submit', 'button', 'reset', 'image'];
 
 self.DAARI_IS_ACTIONABLE = function (element) {
@@ -87,8 +77,6 @@ self.DAARI_IS_ACTIONABLE = function (element) {
   if (tag === 'input') {
     return self.DAARI_ACTIONABLE_INPUT_TYPES.indexOf(type) !== -1;
   }
-  /* For anything that is not an input, serializePage puts the ARIA role in
-     "type". A link dressed as a button is treated as a button. */
   return type === 'button';
 };
 
@@ -99,16 +87,75 @@ function containsAny(name, words) {
   return false;
 }
 
-/* Does Daari have to stop before pointing at this? */
+/* Does the name carry a digit or a currency symbol? "Pay ₹378" does; "Payment
+   options" does not. This is what separates a link that takes money from a link
+   that explains how money is taken. */
+function looksLikeAnAmount(name) {
+  return /[0-9]/.test(name) ||
+         /[₹$£€]/.test(name);
+}
+
+/* --------------------------------------------------------- word matching only
+
+   Kept separate so it can be tested on its own, and so the three rules below
+   read clearly. This asks only "do the WORDS look dangerous", with no view on
+   what kind of control it is. */
 self.DAARI_NEEDS_CONFIRM = function (accessibleName) {
   var name = String(accessibleName || '').toLowerCase();
   if (!name) { return false; }
 
   if (containsAny(name, self.DAARI_CONFIRM_WORDS)) { return true; }
 
-  /* Both halves needed, which is what keeps "Cancellations" out. */
+  /* Cancelling, on a link or a tab, needs a booking word as well. That is what
+     keeps "Cancellations" and "Cancellation rules" from stopping somebody who
+     just wants to read the rules. */
   if (containsAny(name, self.DAARI_CANCEL_WORDS) &&
       containsAny(name, self.DAARI_BOOKING_WORDS)) {
+    return true;
+  }
+
+  return false;
+};
+
+/* ------------------------------------------------------------- THE DECISION */
+
+/* Daari must stop before pointing at this if ANY of three rules fire.
+
+   1. It ACTS and its words are dangerous -- including a bare "Cancel", which is
+      safe to gate here precisely because we know it is a real control and not a
+      menu tab. This is the rule that closes the bare-"Cancel" gap.
+
+   2. It does not act, but it says it cancels something BOOKED. An anchor like
+      "Cancel this booking" really does cancel a booking on plenty of sites.
+
+   3. It does not act, but it names money AND an amount -- "Pay ₹378" as a
+      styled link. The amount is what distinguishes it from "Payment options",
+      which is a page about paying and should not stop anybody.
+
+   REMAINING GAP, stated rather than hidden: a bare "Pay Now" LINK with no
+   amount and no role="button" still slips through. Rule 3 cannot catch it
+   without also stopping every "Payment options" link, and a stop that fires on
+   help pages is a stop people learn to dismiss. If a real site turns up with
+   one, this is the function to revisit. */
+self.DAARI_MUST_CONFIRM = function (element) {
+  if (!element) { return false; }
+  var name = String(element.name || '').toLowerCase();
+  if (!name) { return false; }
+
+  if (self.DAARI_IS_ACTIONABLE(element)) {
+    /* 1 */
+    return containsAny(name, self.DAARI_CONFIRM_WORDS) ||
+           containsAny(name, self.DAARI_CANCEL_WORDS);
+  }
+
+  /* 2 */
+  if (containsAny(name, self.DAARI_CANCEL_WORDS) &&
+      containsAny(name, self.DAARI_BOOKING_WORDS)) {
+    return true;
+  }
+
+  /* 3 */
+  if (containsAny(name, self.DAARI_MONEY_WORDS) && looksLikeAnAmount(name)) {
     return true;
   }
 
