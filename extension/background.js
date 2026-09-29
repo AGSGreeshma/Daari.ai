@@ -69,12 +69,21 @@ async function allRecipes() {
   return loaded;
 }
 
-/* Which recipe, if any, is this spoken goal asking for?
+/* Which recipe, if any, is this goal asking for ON THIS PAGE?
 
-   Every language's phrases are checked regardless of the chosen language,
-   because people mix languages when they speak -- "PNR status చెక్ చేయాలి" is
-   completely normal. The recipe matching the most phrases wins. */
-async function matchRecipe(goal) {
+   BOTH have to agree: the goal must match the recipe's phrases AND the page must
+   be on one of the recipe's hosts. The goal alone is not enough, and finding that
+   out the hard way is why this function takes a url.
+
+   What happened without it: on irctc.co.in the practice-site recipe matched the
+   goal "book a ticket", found From and To by luck, the panel announced "Step 3 of
+   15", and then Daari said "I am not sure" at the Class step. Confidently wrong on
+   somebody's real booking page is the worst thing it can do.
+
+   Every language's phrases are checked regardless of the chosen language, because
+   people mix languages when they speak -- "PNR status చెక్ చేయాలి" is completely
+   normal. The recipe matching the most phrases wins. */
+async function matchRecipe(goal, url) {
   var text = String(goal || '').toLowerCase();
   if (!text) { return null; }
 
@@ -88,6 +97,9 @@ async function matchRecipe(goal) {
        Daari would say "I am not sure" on a page it could otherwise have read
        with no recipe at all -- worse than having no recipe. */
     if (recipes[task].enabled === false) { return; }
+
+    /* Wrong site: not a candidate, however well the words line up. */
+    if (!self.DAARI_RECIPE_APPLIES(recipes[task], url)) { return; }
 
     var phrases = recipes[task].match_phrases || {};
     var hits = 0;
@@ -276,6 +288,16 @@ async function callAi(session, page, recipeStep, lang, hintIndex) {
 
 async function decideStep(session, page) {
   var recipe = await recipeFor(session);
+
+  /* A session can wander. Someone starts on the practice site and then opens
+     IRCTC in the same tab, and the recipe's steps are meaningless there -- its
+     page names, its labels, its count. So the recipe is re-checked against THIS
+     page every single step, not just when the session began, and if it does not
+     belong here the model works alone. */
+  var hadRecipe = !!recipe;
+  var onItsSite = recipe ? self.DAARI_RECIPE_APPLIES(recipe, page && page.url) : false;
+  if (recipe && !onItsSite) { recipe = null; }
+
   var recipeStep = recipe ? recipe.steps[session.stepIndex] : null;
   var lang = await currentLang();
   var S = self.DAARI_STRINGS;
@@ -295,6 +317,10 @@ async function decideStep(session, page) {
     index: -1,
     done_when: '',
     stepLabel: '',
+    /* True when the session HAS a recipe but we are not on its site, so the
+       panel shows "Step 4" instead of "Step 4 of 15" about a recipe that is not
+       running here. */
+    offSite: hadRecipe && !onItsSite,
     /* Sent so the page can run its own independent gate check. Defence in
        depth: a safety rule should not have exactly one guard. */
     confirmed: session.confirmedStep === session.stepIndex
@@ -535,7 +561,10 @@ function broadcastStatus(session) {
   if (session) {
     payload.active = true;
     payload.number = session.stepIndex + 1;
-    payload.total = session.total || 0;
+    /* Zero while off the recipe's site, so the panel says "Step 4" rather than
+       "Step 4 of 15" about a recipe that is not running here. */
+    payload.total = session.offSite ? 0 : (session.total || 0);
+    payload.offSite = !!session.offSite;
     payload.awaitingConfirm = session.awaitingConfirm !== null &&
                               session.awaitingConfirm !== undefined;
     payload.finished = !!session.finished;
@@ -562,8 +591,29 @@ var HANDLERS = {
      model works alone on whatever site this is. */
   DAARI_START_FLOW: async function (message) {
     var lang = await currentLang();
-    var task = message.flowId || await matchRecipe(message.goal);
     var recipes = await allRecipes();
+    var task = null;
+
+    if (message.flowId) {
+      /* The panel asked for a specific recipe -- "Start demo on this page". It
+         only gets it if this really is that recipe's site. */
+      var asked = recipes[message.flowId];
+      if (asked && self.DAARI_RECIPE_APPLIES(asked, message.url)) {
+        task = message.flowId;
+      } else {
+        return {
+          ok: false,
+          wrongSite: true,
+          reason: asked
+            ? 'That recipe is for ' + (asked.hosts || []).join(', ') +
+              ', and this page is ' + (self.DAARI_HOST_OF(message.url) || 'unknown') + '.'
+            : 'No such recipe.'
+        };
+      }
+    } else {
+      task = await matchRecipe(message.goal, message.url);
+    }
+
     var recipe = task ? recipes[task] : null;
 
     var session = {
@@ -605,6 +655,14 @@ var HANDLERS = {
     if (!session) { return { active: false }; }
 
     var recipe = await recipeFor(session);
+
+    /* Off its own site, a recipe's page names mean nothing, so none of the
+       forward/back reasoning below can be trusted. Record it so the panel stops
+       claiming "Step 3 of 15" on a site the recipe knows nothing about. */
+    var recipeHere = recipe && self.DAARI_RECIPE_APPLIES(recipe, message.url);
+    session.offSite = !!recipe && !recipeHere;
+    if (!recipeHere) { recipe = null; }
+
     var step = recipe ? recipe.steps[session.stepIndex] : null;
     var here = self.DAARI_PAGE_OF(message.url);
     var notice = null;
@@ -695,7 +753,8 @@ var HANDLERS = {
     return {
       active: true,
       number: session.stepIndex + 1,
-      total: session.total || 0,
+      total: session.offSite ? 0 : (session.total || 0),
+      offSite: !!session.offSite,
       awaitingConfirm: session.awaitingConfirm !== null &&
                        session.awaitingConfirm !== undefined,
       finished: !!session.finished,

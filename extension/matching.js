@@ -76,6 +76,66 @@ self.DAARI_PAGE_OF = function (url) {
   return last.replace(/\.[a-z0-9]+$/i, '').toLowerCase();
 };
 
+/* The hostname of a URL, or '' if it cannot be read. */
+self.DAARI_HOST_OF = function (url) {
+  try {
+    return new URL(String(url)).hostname.toLowerCase();
+  } catch (e) {
+    return '';
+  }
+};
+
+/* Does this recipe belong to the page we are looking at?
+
+   This exists because of a real failure: the practice-site recipe ran on
+   irctc.co.in. It matched From and To by luck, the panel announced "Step 3 of
+   15", and then Daari said "I am not sure" at the Class step -- confidently
+   wrong on somebody's real booking page, which is the worst thing it can do.
+
+   IT FAILS CLOSED. A recipe with no hosts declared matches NOWHERE, rather than
+   everywhere. That is deliberate: the old `site` field was free text that nothing
+   read, and the cost of forgetting to fill a new field in must be a recipe that
+   never runs, not one that runs on the whole internet.
+
+   A host entry is an exact hostname, or "*.example.com" to include subdomains.
+   path_prefix is optional and narrows further, so the practice recipes apply
+   under /practice/ but not to the landing page sharing that hostname. */
+self.DAARI_RECIPE_APPLIES = function (recipe, url) {
+  if (!recipe || recipe.enabled === false) { return false; }
+
+  var hosts = recipe.hosts;
+  if (!Array.isArray(hosts) || !hosts.length) { return false; }
+
+  var host = self.DAARI_HOST_OF(url);
+  if (!host) { return false; }
+
+  var hostOk = false;
+  for (var i = 0; i < hosts.length; i++) {
+    var pattern = String(hosts[i]).toLowerCase();
+    if (pattern.indexOf('*.') === 0) {
+      var bare = pattern.slice(2);
+      /* "*.example.com" covers example.com and anything under it, and must not
+         be fooled by "notexample.com". */
+      if (host === bare || host.slice(-(bare.length + 1)) === '.' + bare) {
+        hostOk = true;
+        break;
+      }
+    } else if (host === pattern) {
+      hostOk = true;
+      break;
+    }
+  }
+  if (!hostOk) { return false; }
+
+  if (recipe.path_prefix) {
+    var path = '';
+    try { path = new URL(String(url)).pathname; } catch (e) { return false; }
+    if (path.indexOf(recipe.path_prefix) !== 0) { return false; }
+  }
+
+  return true;
+};
+
 /* The five fields an element may have, and nothing else.
 
    Rule 2 in one function. Called on the way out of the page AND again in the

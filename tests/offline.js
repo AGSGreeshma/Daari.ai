@@ -84,7 +84,7 @@ async function fakeFetch(url, options) {
 function loadWorker() {
   const ctx = {
     chrome, console, Date, JSON, setTimeout, clearTimeout, RegExp, String, Number,
-    Object, Math, Map, Set, Array, Boolean, Error, fetch: fakeFetch,
+    Object, Math, Map, Set, Array, Boolean, Error, URL, fetch: fakeFetch,
     AbortController: class { constructor() { this.signal = {}; } abort() {} }
   };
   ctx.self = ctx;
@@ -115,6 +115,9 @@ const PAYMENT_ELEMENTS = [
   { i: 2, tag: 'button', type: 'submit', name: 'Pay \u20B9378', filled: false }
 ];
 const SEARCH_URL = 'https://daari-ai.vercel.app/practice/';
+/* Recipes only run on their own site, so every start-a-flow call has to say
+   where it is. Tests about the practice recipe start on the practice site. */
+const START_URL = SEARCH_URL;
 const PAYMENT_URL = 'https://daari-ai.vercel.app/practice/payment.html';
 
 const page = (url, elements) => ({ url, title: 'Yatra Demo Rail', elements });
@@ -154,7 +157,7 @@ console.log('\n2. A spoken goal picks the right recipe');
   ];
   for (const [goal, want, label] of goals) {
     storage.session = {}; chrome.storage.session = makeArea(storage.session);
-    const reply = await call({ type: 'DAARI_START_FLOW', goal, tabId: 1 });
+    const reply = await call({ type: 'DAARI_START_FLOW', url: START_URL, goal, tabId: 1  });
     check(label, reply.flowId, want);
   }
 }
@@ -296,6 +299,164 @@ console.log('\n2c. THE GATE DECISION: what a thing says AND what it is');
   check('  but the same words on a button are', MUST(el('button', 'button', 'Pay Now')), true);
 }
 
+console.log('\n2d. A recipe only ever runs on its OWN site');
+{
+  /* This section exists because of a real failure on a real site. On
+     irctc.co.in the practice-site recipe matched the goal "book a ticket", found
+     From and To by luck, the panel announced "Step 3 of 15", and then Daari said
+     "I am not sure" at the Class step. Confidently wrong on somebody's real
+     booking page is the worst thing Daari can do. */
+
+  const APPLIES = ctx.self.DAARI_RECIPE_APPLIES;
+  const HOST = ctx.self.DAARI_HOST_OF;
+  const recipes = JSON.parse(JSON.stringify(ctx.self.DAARI_FLOWS || {}));
+
+  check('hostname of a normal url', HOST('https://www.irctc.co.in/nget/train-search'), 'www.irctc.co.in');
+  check('hostname with a port', HOST('http://localhost:3000/practice/'), 'localhost');
+  check('hostname of rubbish', HOST('not a url'), '');
+  check('hostname of nothing', HOST(undefined), '');
+
+  const practice = {
+    hosts: ['daari-ai.vercel.app', 'localhost', '127.0.0.1'],
+    path_prefix: '/practice/'
+  };
+
+  // Where it SHOULD run.
+  [
+    'https://daari-ai.vercel.app/practice/',
+    'https://daari-ai.vercel.app/practice/passenger.html',
+    'http://localhost:3000/practice/index.html',
+    'http://127.0.0.1:3000/practice/results.html'
+  ].forEach(function (url) {
+    check('runs on ' + url, APPLIES(practice, url), true);
+  });
+
+  // THE BUG: real booking sites. A matching goal must change nothing.
+  [
+    'https://www.irctc.co.in/nget/train-search',
+    'https://irctc.co.in/',
+    'https://www.redbus.in/',
+    'https://redbus.in/bus-tickets/hyderabad-to-warangal',
+    'https://www.abhibus.com/',
+    'https://abhibus.com/bus-booking'
+  ].forEach(function (url) {
+    check('does NOT run on ' + url, APPLIES(practice, url), false);
+  });
+
+  // Right host, wrong part of it: the landing page is not the practice site.
+  check('not on the landing page of its own host',
+    APPLIES(practice, 'https://daari-ai.vercel.app/'), false);
+  check('not on the repo README either',
+    APPLIES(practice, 'https://daari-ai.vercel.app/site/index.html'), false);
+
+  // A lookalike hostname must not slip through.
+  check('not on a lookalike host',
+    APPLIES(practice, 'https://daari-ai.vercel.app.evil.com/practice/'), false);
+
+  // Subdomain wildcards, for recipes that need them.
+  const wild = { hosts: ['*.irctc.co.in'] };
+  check('wildcard covers a subdomain', APPLIES(wild, 'https://www.irctc.co.in/x'), true);
+  check('wildcard covers the bare domain', APPLIES(wild, 'https://irctc.co.in/x'), true);
+  check('wildcard is not fooled by a suffix match',
+    APPLIES(wild, 'https://notirctc.co.in/x'), false);
+
+  // IT FAILS CLOSED. This is the property that stops the bug coming back.
+  check('a recipe with NO hosts runs nowhere',
+    APPLIES({ steps: [] }, 'https://daari-ai.vercel.app/practice/'), false);
+  check('a recipe with an empty hosts list runs nowhere',
+    APPLIES({ hosts: [] }, 'https://daari-ai.vercel.app/practice/'), false);
+  check('a disabled recipe runs nowhere',
+    APPLIES({ hosts: ['daari-ai.vercel.app'], enabled: false },
+      'https://daari-ai.vercel.app/practice/'), false);
+
+  // And the REAL recipe files, as shipped.
+  const shipped = {};
+  for (const file of fs.readdirSync(path.join(EXT, 'recipes'))) {
+    if (!file.endsWith('.json')) { continue; }
+    const r = JSON.parse(fs.readFileSync(path.join(EXT, 'recipes', file), 'utf8'));
+    shipped[r.task] = r;
+  }
+
+  ['book-ticket', 'check-pnr'].forEach(function (task) {
+    check(task + ' declares its hosts', Array.isArray(shipped[task].hosts) &&
+      shipped[task].hosts.length > 0, true);
+    check(task + ' runs on the practice site',
+      APPLIES(shipped[task], 'https://daari-ai.vercel.app/practice/index.html'), true);
+    ['https://www.irctc.co.in/nget/train-search',
+     'https://www.redbus.in/',
+     'https://www.abhibus.com/'].forEach(function (url) {
+      check(task + ' does NOT run on ' + HOST(url),
+        APPLIES(shipped[task], url), false);
+    });
+  });
+
+  check('the stub real-site recipe runs nowhere yet',
+    APPLIES(shipped['real-pnr'], 'https://www.irctc.co.in/'), false);
+}
+
+console.log('\n2e. Matching a goal requires the right site TOO');
+{
+  /* The end-to-end version of the same thing, through the real worker: a goal
+     that matches perfectly must still produce no recipe on the wrong site. */
+  const start = async (goal, url, flowId) => {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    return call({ type: 'DAARI_START_FLOW', goal: goal, url: url, flowId: flowId, tabId: 1 });
+  };
+
+  const PRACTICE = 'https://daari-ai.vercel.app/practice/index.html';
+
+  let r = await start('I want to book a train ticket', PRACTICE);
+  check('on the practice site, a matching goal finds the recipe', r.flowId, 'book-ticket');
+
+  // The reported bug, end to end.
+  for (const url of ['https://www.irctc.co.in/nget/train-search',
+                     'https://www.redbus.in/',
+                     'https://www.abhibus.com/']) {
+    r = await start('I want to book a train ticket', url);
+    check('no recipe on ' + ctx.self.DAARI_HOST_OF(url) + ' despite a matching goal',
+      [r.flowId, r.aiOnly], [null, true]);
+  }
+
+  // Telugu goal, same rule.
+  r = await start('నాకు ట్రైన్ టికెట్ బుక్ చేయాలి', 'https://www.irctc.co.in/');
+  check('no recipe on IRCTC for the Telugu goal either', r.flowId, null);
+
+  // PNR goal on a real railway site: tempting, still refused.
+  r = await start('check my PNR status', 'https://www.irctc.co.in/nget/train-search');
+  check('no recipe on IRCTC for a PNR goal', r.flowId, null);
+  r = await start('check my PNR status', PRACTICE);
+  check('but it works on the practice site', r.flowId, 'check-pnr');
+
+  // "Start demo on this page" is refused off-site, and creates no session.
+  r = await start('book a ticket', 'https://www.irctc.co.in/', 'book-ticket');
+  check('forcing the demo off-site is refused', [r.ok, r.wrongSite], [false, true]);
+  check('  and the refusal names the site', /irctc/.test(r.reason || ''), true);
+  check('  and NO session was created', storage.session.daariSession, undefined);
+
+  r = await start('book a ticket', PRACTICE, 'book-ticket');
+  check('forcing the demo on its own site works', r.flowId, 'book-ticket');
+
+  /* And a session that WANDERS: started on the practice site, then the user
+     opens a real site in the same tab. The recipe must stop applying, and the
+     panel must stop claiming a step count from it. */
+  const els = [{ i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false }];
+  let step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    { url: PRACTICE, title: 'practice', elements: els }));
+  check('on its own site the recipe drives, 15 steps', step.total, 15);
+
+  step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    { url: 'https://www.irctc.co.in/nget/train-search', title: 'IRCTC', elements: els }));
+  check('wandering off-site drops the recipe', step.total, 0);
+  check('  so the panel cannot say "of 15"', step.offSite, true);
+
+  const status = await call({ type: 'DAARI_GET_STATUS' });
+  check('  and the status agrees', [status.total, status.offSite], [0, true]);
+
+  step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+    { url: PRACTICE, title: 'practice', elements: els }));
+  check('coming back restores the recipe', [step.total, step.offSite], [15, false]);
+}
+
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
@@ -304,7 +465,7 @@ console.log('\n3. The AI path: model agrees with the recipe');
   aiReply = { elementIndex: 4, speech: 'Type your starting station here',
               done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
 
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
   const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
 
   check('path is ai', step.path, 'ai');
@@ -320,7 +481,7 @@ console.log('\n4. THE VALIDATION GATE');
   async function decideWith(reply, fail, elements, url) {
     storage.session = {}; chrome.storage.session = makeArea(storage.session);
     aiReply = reply; aiFail = fail;
-    await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
     return call(Object.assign({ type: 'DAARI_PAGE_READY' },
       page(url || SEARCH_URL, elements || SEARCH_ELEMENTS)));
   }
@@ -372,7 +533,7 @@ console.log('\n5. The whole booking completes with the API dead');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiFail = 500; aiReply = null;
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
 
   let step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
   let paths = [step.path];
@@ -396,7 +557,7 @@ console.log('\n6. No recipe at all: the model works alone');
   aiReply = { elementIndex: 0, speech: 'Type what you are looking for here',
               done_when: 'field_filled', stopAndConfirm: false, confidence: 0.8 };
 
-  const started = await call({ type: 'DAARI_START_FLOW', goal: 'find something', tabId: 1 });
+  const started = await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'find something', tabId: 1  });
   check('no recipe matched', started.flowId, null);
   check('reported as AI-only', started.aiOnly, true);
 
@@ -411,7 +572,7 @@ console.log('\n6. No recipe at all: the model works alone');
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiReply = { elementIndex: null, speech: 'no idea', done_when: 'clicked',
               stopAndConfirm: false, confidence: 0.1 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'find something', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'find something', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/page', OTHER)));
   check('unsure with no safety net -> path none', s.path, 'none');
@@ -427,7 +588,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   aiRequests.length = 0; aiFail = null;
   aiReply = { elementIndex: 2, speech: 'Press Pay', done_when: 'url_changed',
               stopAndConfirm: false, confidence: 0.99 };
-  await call({ type: 'DAARI_START_FLOW', flowId: 'book-ticket', goal: 'book', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, flowId: 'book-ticket', goal: 'book', tabId: 1  });
   // jump the session to the Pay step
   const sess = storage.session.daariSession;
   sess.stepIndex = 13;
@@ -465,7 +626,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   const ORDINARY = [{ i: 0, tag: 'input', type: 'text', name: 'Some box', filled: false }];
   aiReply = { goal_supported: true, elementIndex: 0, speech: 'Type here',
               done_when: 'field_filled', stopAndConfirm: true, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', ORDINARY)));
   check('an ACCEPTED answer may add a stop', [s.path, s.gate], ['gate', true]);
@@ -477,7 +638,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiReply = { goal_supported: true, elementIndex: 7, speech: 'Press Search',
               done_when: 'clicked', stopAndConfirm: true, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
   check('a DISCARDED answer loses its stop too', [s.path, s.gate], ['fallback', false]);
   check('  it is still recorded, so the ask is visible', s.modelWantedStop, true);
@@ -488,7 +649,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   const DANGEROUS = [{ i: 0, tag: 'button', type: 'submit', name: 'Pay ₹500', filled: false }];
   aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press it',
               done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', DANGEROUS)));
   check('our word list still stops, even when the model says not to', s.gate, true);
@@ -498,7 +659,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   const SCARY_LINK = [{ i: 0, tag: 'a', type: '', name: 'Cancel this booking', filled: false }];
   aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press it',
               done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', SCARY_LINK)));
   check('a LINK saying "Cancel this booking" GATES (it names a booking)', s.gate, true);
@@ -506,7 +667,7 @@ console.log('\n7. Safety: the gate still decides, and the model can only add');
   // The same words on a BUTTON do.
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   const SCARY_BUTTON = [{ i: 0, tag: 'button', type: 'button', name: 'Cancel this booking', filled: false }];
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', SCARY_BUTTON)));
   check('a BUTTON saying "Cancel this booking" GATES', s.gate, true);
@@ -521,7 +682,7 @@ console.log('\n7c. No recipe means a higher bar for confidence');
   aiFail = null;
   aiReply = { goal_supported: true, elementIndex: 0, speech: 'Press Continue',
               done_when: 'clicked', stopAndConfirm: false, confidence: 0.5 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   let s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', PLAIN)));
   check('0.5 with no recipe is not believed', s.path, 'none');
@@ -529,7 +690,7 @@ console.log('\n7c. No recipe means a higher bar for confidence');
 
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiReply.confidence = 0.75;
-  await call({ type: 'DAARI_START_FLOW', goal: 'do a thing', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'do a thing', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://somewhere.else/x', PLAIN)));
   check('0.75 with no recipe is believed', s.path, 'ai');
@@ -550,7 +711,7 @@ console.log('\n7b. goal_supported: saying "I am not sure" and meaning it');
   aiFail = null;
   aiReply = { goal_supported: false, elementIndex: 1, speech: 'Press Pay',
               done_when: 'url_changed', stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'apply for a passport', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'apply for a passport', tabId: 1  });
   let s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://x.dev/payment.html', PAYMENT)));
   check('a false goal_supported overrides a confident element choice', s.path, 'none');
@@ -565,7 +726,7 @@ console.log('\n7b. goal_supported: saying "I am not sure" and meaning it');
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiReply = { goal_supported: true, elementIndex: 0, speech: 'Type your card number here',
               done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'complete this form', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'complete this form', tabId: 1  });
   s = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
     page('https://x.dev/payment.html', PAYMENT)));
   check('a true goal_supported lets the answer through', s.path, 'ai');
@@ -578,7 +739,7 @@ console.log('\n8. Rule 2: nothing the user typed can leave');
   aiRequests.length = 0; aiFail = null;
   aiReply = { elementIndex: 4, speech: 'ok', done_when: 'field_filled',
               stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
   await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
 
   const sentKeys = new Set();
@@ -594,7 +755,7 @@ console.log('\n8. Rule 2: nothing the user typed can leave');
 
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiRequests.length = 0;
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
   const s = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, poisoned)));
   check('the worker sent NOTHING over the network', aiRequests.length, 0);
   check('and fell back to the recipe instead of leaking', s.path, 'fallback');
@@ -606,7 +767,7 @@ console.log('\n9. Budget: 25 calls, then recipe only');
   aiFail = null;
   aiReply = { elementIndex: 4, speech: 'Type here', done_when: 'field_filled',
               stopAndConfirm: false, confidence: 0.9 };
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
 
   const sess = storage.session.daariSession;
   sess.aiCallCount = 25;
@@ -641,7 +802,7 @@ console.log('\n11. Navigation still works now the steps come from JSON');
 
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
   aiFail = 500;   // recipe-only, so the walk is deterministic
-  await call({ type: 'DAARI_START_FLOW', goal: 'book a train ticket', tabId: 1 });
+  await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1  });
 
   const go = (url, els) => call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(url, els || ANY)));
   const done = (url, els) => call(Object.assign({ type: 'DAARI_STEP_DONE' }, page(url, els || ANY)));

@@ -1,25 +1,33 @@
 {
   "site": "TO BE FILLED IN",
+  "_hosts_why": "WHERE THIS RECIPE MAY RUN. Checked against the page hostname before the recipe is ever considered, goal match or not. This is not decoration: without it the practice recipe ran on irctc.co.in, matched From and To by luck, announced \"Step 3 of 15\" and then said \"I am not sure\" on somebody real booking page. Matching FAILS CLOSED - no hosts means the recipe runs nowhere. LEFT EMPTY ON PURPOSE while this recipe is a stub: it must not run anywhere until the real hostname and labels are filled in from a snapshot.",
+  "hosts": [],
   "task": "real-pnr",
   "label": "Check a PNR status on a real railway enquiry page",
   "enabled": false,
-
   "_status": "STUB - NOT YET USABLE. The look_for values below are placeholders and have deliberately NOT been guessed. Capture the real page with the extension popup's 'Save page snapshot' button, read the actual accessible names out of the snapshot, and put them here. A recipe written from a guess resolves to nothing, Daari says 'I am not sure', and the generality claim fails live. enabled:false keeps it out of goal matching until it is real.",
-
   "_scope": "READ ONLY, and that is a hard boundary, not a preference. Enquiry and status only. Never a login, never a payment, never a booking. Daari points; the user acts; nothing here changes any record anywhere.",
-
   "_captcha": "If the page has a CAPTCHA, Daari must say only 'Type the letters in the picture yourself' and nothing else. It never reads the image, never guesses the letters, never solves it. Reading it would break rule 1 in spirit even though no click is involved, and solving it would make Daari a tool for defeating a protection the site chose to have. The step below uses done_when field_filled, so Daari simply waits for the user to do it.",
-
   "match_phrases": {
-    "te": ["పిఎన్ఆర్", "స్టేటస్"],
-    "hi": ["पीएनआर", "स्टेटस"],
-    "en": ["pnr", "status"]
+    "te": [
+      "పిఎన్ఆర్",
+      "స్టేటస్"
+    ],
+    "hi": [
+      "पीएनआर",
+      "स्टेटस"
+    ],
+    "en": [
+      "pnr",
+      "status"
+    ]
   },
-
   "steps": [
     {
       "page": "REPLACE_WITH_REAL_PAGE_BASENAME",
-      "look_for": ["REPLACE: the real accessible name of the PNR input"],
+      "look_for": [
+        "REPLACE: the real accessible name of the PNR input"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Type your ten digit PNR number here",
@@ -29,7 +37,9 @@
     },
     {
       "page": "REPLACE_WITH_REAL_PAGE_BASENAME",
-      "look_for": ["REPLACE: the real accessible name of the captcha input"],
+      "look_for": [
+        "REPLACE: the real accessible name of the captcha input"
+      ],
       "done_when": "field_filled",
       "sensitive": true,
       "_why": "Daari never reads or solves the picture. It says only that the user should type what they see.",
@@ -41,7 +51,9 @@
     },
     {
       "page": "REPLACE_WITH_REAL_PAGE_BASENAME",
-      "look_for": ["REPLACE: the real accessible name of the submit button"],
+      "look_for": [
+        "REPLACE: the real accessible name of the submit button"
+      ],
       "done_when": "text_appears:REPLACE with text that appears only once the result is shown",
       "say": {
         "en": "Now press this button to see the status",

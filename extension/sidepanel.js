@@ -153,7 +153,10 @@
       return;
     }
 
-    /* With no recipe there is no known total, and Daari does not invent one. */
+    /* With no recipe there is no known total, and Daari does not invent one.
+       That includes being off a recipe's own site: the worker sends total 0 there,
+       so the panel stops claiming "Step 3 of 15" about a recipe that is not
+       running on this page. That exact claim appeared on irctc.co.in. */
     el.counter.textContent = status.total
       ? T(S.ui.stepOf, lang, { n: status.number, total: status.total })
       : T(S.ui.stepOnly, lang, { n: status.number });
@@ -381,8 +384,23 @@
         type: 'DAARI_START_FLOW',
         goal: goal,
         flowId: forcedFlowId || undefined,
-        tabId: tab.id
+        tabId: tab.id,
+        /* The worker needs the address, not just the tab: a recipe only runs on
+           its own site, and it checks that before anything else. */
+        url: tab.url || ''
       });
+
+      /* Asking for a specific recipe on the wrong site is refused outright, and
+         no session is created. Say so plainly rather than starting something
+         that would then claim "Step 3 of 15" about a page it does not know. */
+      if (reply && reply.wrongSite) {
+        showMessage('bad',
+          'That demo only runs on the practice site.\n\n' +
+          reply.reason + '\n\n' +
+          'Open the practice site to run the demo, or just say what you want to do ' +
+          'here and I will read this page myself.');
+        return;
+      }
 
       /* The session exists now, so ask the page to report in with what it can
          see. Everything after this is the worker's decision. */

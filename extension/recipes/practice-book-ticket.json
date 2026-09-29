@@ -1,20 +1,44 @@
 {
   "site": "daari-ai.vercel.app/practice",
+  "_hosts_why": "WHERE THIS RECIPE MAY RUN. Checked against the page hostname before the recipe is ever considered, goal match or not. This is not decoration: without it the practice recipe ran on irctc.co.in, matched From and To by luck, announced \"Step 3 of 15\" and then said \"I am not sure\" on somebody real booking page. Matching FAILS CLOSED - no hosts means the recipe runs nowhere.",
+  "hosts": [
+    "daari-ai.vercel.app",
+    "localhost",
+    "127.0.0.1"
+  ],
+  "path_prefix": "/practice/",
   "task": "book-ticket",
   "label": "Book a train ticket on Yatra Demo Rail",
-
   "_comment": "A recipe is a HINT and a SAFETY NET, not a script. The AI reads the live page on every step and writes the sentence itself; this file is passed to it as a clue, and is used verbatim only when the AI's answer is rejected. See extension/background.js for the validation gate. The say[] text here is the pre-written fallback phrasing.",
-
   "match_phrases": {
-    "te": ["టికెట్", "బుక్", "ట్రైన్", "రైలు", "ప్రయాణం"],
-    "hi": ["टिकट", "बुक", "ट्रेन", "रेल", "यात्रा"],
-    "en": ["book", "ticket", "train", "reserve", "travel"]
+    "te": [
+      "టికెట్",
+      "బుక్",
+      "ట్రైన్",
+      "రైలు",
+      "ప్రయాణం"
+    ],
+    "hi": [
+      "टिकट",
+      "बुक",
+      "ट्रेन",
+      "रेल",
+      "यात्रा"
+    ],
+    "en": [
+      "book",
+      "ticket",
+      "train",
+      "reserve",
+      "travel"
+    ]
   },
-
   "steps": [
     {
       "page": "index",
-      "look_for": ["from station"],
+      "look_for": [
+        "from station"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Type where you are starting from",
@@ -24,7 +48,9 @@
     },
     {
       "page": "index",
-      "look_for": ["to station"],
+      "look_for": [
+        "to station"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Now type the station you are going to",
@@ -34,7 +60,9 @@
     },
     {
       "page": "index",
-      "look_for": ["class"],
+      "look_for": [
+        "class"
+      ],
       "done_when": "value_changed",
       "_why": "The dropdown already reads Sleeper, so field_filled would be true before the user did anything and the step would finish instantly.",
       "say": {
@@ -45,7 +73,9 @@
     },
     {
       "page": "index",
-      "look_for": ["search trains"],
+      "look_for": [
+        "search trains"
+      ],
       "done_when": "url_changed",
       "say": {
         "en": "Now press this Search Trains button",
@@ -55,7 +85,9 @@
     },
     {
       "page": "results",
-      "look_for": ["book"],
+      "look_for": [
+        "book"
+      ],
       "done_when": "url_changed",
       "_why": "Four identical Book buttons. Daari rings the first and says 'next to the train you want', because it cannot know which train was meant.",
       "say": {
@@ -66,7 +98,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["passenger name"],
+      "look_for": [
+        "passenger name"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Type the passenger name here",
@@ -76,7 +110,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["age"],
+      "look_for": [
+        "age"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Type the age here",
@@ -86,7 +122,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["gender"],
+      "look_for": [
+        "gender"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Choose the gender here",
@@ -96,7 +134,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["mobile number"],
+      "look_for": [
+        "mobile number"
+      ],
       "done_when": "field_filled",
       "say": {
         "en": "Type the ten digit mobile number here",
@@ -106,7 +146,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["send otp"],
+      "look_for": [
+        "send otp"
+      ],
       "done_when": "text_appears:demo one-time password",
       "_why": "Waits for the code to actually become VISIBLE, not just for the button to be clicked, so Daari does not move on if nothing happened.",
       "say": {
@@ -117,7 +159,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["enter otp"],
+      "look_for": [
+        "enter otp"
+      ],
       "done_when": "field_filled",
       "sensitive": true,
       "say": {
@@ -128,7 +172,9 @@
     },
     {
       "page": "passenger",
-      "look_for": ["continue to payment"],
+      "look_for": [
+        "continue to payment"
+      ],
       "done_when": "url_changed",
       "_why": "Trips the confirm gate on the word 'payment', which is the gate working rather than misfiring. See safety.js.",
       "say": {
@@ -139,7 +185,9 @@
     },
     {
       "page": "payment",
-      "look_for": ["card number"],
+      "look_for": [
+        "card number"
+      ],
       "done_when": "field_filled",
       "sensitive": true,
       "say": {
@@ -150,7 +198,9 @@
     },
     {
       "page": "payment",
-      "look_for": ["pay"],
+      "look_for": [
+        "pay"
+      ],
       "done_when": "url_changed",
       "confirm": true,
       "say": {

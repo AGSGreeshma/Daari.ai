@@ -811,12 +811,44 @@
     }
   });
 
-  /* Handy while developing: window.daari.serializePage() in the page console. */
-  window.daari = {
-    serializePage: serializePage,
-    resolveByName: resolveByName,
-    highlight: highlight,
-    showCaption: showCaption,
-    clearAll: clearAll
-  };
+  /* Handy while developing: window.daari.serializePage() in the page console.
+     Nothing Daari NEEDS depends on this, so it must never be able to break
+     anything -- and it did. `resolveByName` had been renamed to the shared
+     DAARI_RESOLVE_BY_NAME, this line kept the old name, and every page Daari
+     loaded on threw "resolveByName is not defined" at this point. A convenience
+     for us broke the overlay for the user.
+
+     So: built defensively, on purpose.
+       - the whole block is wrapped, because a page can make window.daari
+         non-writable, or define it as a getter that throws
+       - every function is wrapped, so a call from the console on some hostile
+         third-party page cannot propagate an exception back into the overlay
+       - it goes LAST, so if it somehow still fails, everything real is already
+         set up and running */
+  try {
+    var expose = function (name, fn) {
+      return function () {
+        try {
+          return fn.apply(null, arguments);
+        } catch (error) {
+          console.warn('[Daari] window.daari.' + name + ' failed:', error);
+          return null;
+        }
+      };
+    };
+
+    window.daari = {
+      serializePage: expose('serializePage', serializePage),
+      resolveByName: expose('resolveByName', function (labels) {
+        return DAARI_RESOLVE_BY_NAME(serializePage(), labels);
+      }),
+      highlight: expose('highlight', highlight),
+      showCaption: expose('showCaption', showCaption),
+      clearAll: expose('clearAll', clearAll),
+      version: '0.7'
+    };
+  } catch (error) {
+    /* A page that will not let us attach a debug object is not a problem worth
+       telling anyone about. The overlay is already working. */
+  }
 }());
