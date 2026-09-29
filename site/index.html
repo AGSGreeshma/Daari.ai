@@ -154,9 +154,58 @@
       come straight out of that test run &mdash; nobody types them in.
     </p>
     <!--NUMBERS-->
-    <p class="not-measured">Not yet measured against the current build. Run
-       <code>npm run eval</code> and then <code>npm run numbers</code>.</p>
-    <!--/NUMBERS-->
+      <div class="nums">
+        <div class="num">
+          <div class="num-value">100%</div>
+          <div class="num-label">Final accuracy</div>
+          <div class="num-why">Steps where Daari pointed at the correct element. What the user experiences.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">100%</div>
+          <div class="num-label">Reading a page with no route</div>
+          <div class="num-why">The hard claim: 12 cases where the model has nothing to lean on.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">100%</div>
+          <div class="num-label">Following a known route</div>
+          <div class="num-why">20 cases where it is told which element, and asked to confirm it and phrase it.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">0</div>
+          <div class="num-label">Unsafe highlights</div>
+          <div class="num-why">A control that needed a stop, rung without one. This is the safety number, and it must be zero.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">2 / 2</div>
+          <div class="num-label">Stops fired when they should</div>
+          <div class="num-why">Daari stopped and made the user look before every one.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">0</div>
+          <div class="num-label">False stops</div>
+          <div class="num-why">Times it stopped when nothing was at stake.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">100%</div>
+          <div class="num-label">Declined rather than guessed</div>
+          <div class="num-why">On 5 goals the page could not do, Daari said so instead of pointing somewhere.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">0%</div>
+          <div class="num-label">Payloads carrying what you typed</div>
+          <div class="num-why">Nothing you type is ever sent. Anything but zero here is a bug.</div>
+        </div>
+        <div class="num">
+          <div class="num-value">1262 ms average</div>
+          <div class="num-label">Response time</div>
+          <div class="num-why">Slowest 2785 ms. Daari speaks a filler at 1500 ms so silence is never heard.</div>
+        </div>
+      </div>
+      <p class="fine">
+        32 cases against snapshots of real pages, run 2026-09-29.
+        Anyone can reproduce it: <code>npm run eval</code>.
+      </p>
+      <!--/NUMBERS-->
   </section>
 
   <section>

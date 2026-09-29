@@ -117,7 +117,21 @@ press the wrong button.
 ## Results
 
 <!--NUMBERS-->
-Not yet measured against the current build. Run `npm run eval`, then `npm run numbers`.
+
+| Measure | Result | What it means |
+|---|---|---|
+| Final accuracy | **100%** | Steps where Daari pointed at the correct element. What the user experiences. |
+| Reading a page with no route | **100%** | The hard claim: 12 cases where the model has nothing to lean on. |
+| Following a known route | **100%** | 20 cases where it is told which element, and asked to confirm it and phrase it. |
+| Unsafe highlights | **0** | A control that needed a stop, rung without one. This is the safety number, and it must be zero. |
+| Stops fired when they should | **2 / 2** | Daari stopped and made the user look before every one. |
+| False stops | **0** | Times it stopped when nothing was at stake. |
+| Declined rather than guessed | **100%** | On 5 goals the page could not do, Daari said so instead of pointing somewhere. |
+| Payloads carrying what you typed | **0%** | Nothing you type is ever sent. Anything but zero here is a bug. |
+| Response time | **1262 ms average** | Slowest 2785 ms. Daari speaks a filler at 1500 ms so silence is never heard. |
+
+<sub>32 cases against snapshots of real pages, run 2026-09-29. Reproduce with `npm run eval`; raw output in `tests/results.json`.</sub>
+
 <!--/NUMBERS-->
 
 ## Setup

@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daari evaluation</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --surface: #fcfcfb;
+  --raised: #ffffff;
+  --line: #e4e1d9;
+  --ink: #1c1c1b;
+  --ink-2: #55534d;
+  --ink-3: #85827a;
+
+  --good: #0f7a45;   --good-track: #dcefe4;
+  --warn: #a2620b;   --warn-track: #f2e5cd;
+  --bad:  #b3261e;   --bad-track:  #f7dcd9;
+
+  --brand: #7a1f2b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #1a1a19;
+    --raised: #232321;
+    --line: #37372f;
+    --ink: #f2f1ec;
+    --ink-2: #b8b5ad;
+    --ink-3: #85827a;
+
+    --good: #35a06a;   --good-track: #1d3a2c;
+    --warn: #bd8a32;   --warn-track: #3a3120;
+    --bad:  #d55f57;   --bad-track:  #3d2422;
+
+    --brand: #d98b96;
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #1a1a19;
+  --raised: #232321;
+  --line: #37372f;
+  --ink: #f2f1ec;
+  --ink-2: #b8b5ad;
+  --ink-3: #85827a;
+  --good: #35a06a;   --good-track: #1d3a2c;
+  --warn: #bd8a32;   --warn-track: #3a3120;
+  --bad:  #d55f57;   --bad-track:  #3d2422;
+  --brand: #d98b96;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 24px 60px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.wrap { max-width: 1000px; margin: 0 auto; }
+
+header { border-bottom: 2px solid var(--brand); padding-bottom: 18px; margin-bottom: 30px; }
+h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.2px; }
+.sub { margin: 0; color: var(--ink-2); font-size: 14px; }
+.sub code { font-size: 13px; color: var(--ink-3); }
+
+/* ---------- the one hero figure ---------- */
+.hero {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.hero-value {
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  /* Proportional figures on purpose: tabular-nums looks loose at this size. */
+}
+.hero-label { font-size: 17px; color: var(--ink-2); max-width: 420px; }
+.hero-note { margin: 0 0 32px; color: var(--ink-3); font-size: 13.5px; }
+
+/* ---------- KPI row ---------- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 14px;
+  margin-bottom: 34px;
+}
+.tile {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 15px 16px 17px;
+}
+.tile .label { font-size: 12.5px; color: var(--ink-2); margin-bottom: 7px; }
+.tile .value {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  margin-bottom: 3px;
+}
+/* The state word. This is what carries meaning when colour cannot -- CVD,
+   greyscale print, a black-and-white slide. */
+.tile .state {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.tile .why { font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
+
+/* Meter: 4px rounded data-end, track is a lighter step of the same ramp. */
+.meter { height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 11px; }
+.meter > i { display: block; height: 100%; border-radius: 4px; }
+
+.s-good .value, .s-good .state { color: var(--good); }
+.s-good .meter { background: var(--good-track); }
+.s-good .meter > i { background: var(--good); }
+.s-warn .value, .s-warn .state { color: var(--warn); }
+.s-warn .meter { background: var(--warn-track); }
+.s-warn .meter > i { background: var(--warn); }
+.s-bad .value, .s-bad .state { color: var(--bad); }
+.s-bad .meter { background: var(--bad-track); }
+.s-bad .meter > i { background: var(--bad); }
+
+/* ---------- plain facts ---------- */
+h2 { font-size: 17px; margin: 34px 0 12px; }
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px 22px;
+  margin-bottom: 8px;
+}
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.fact b { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* ---------- table view ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left;
+  padding: 8px 9px;
+  border-bottom: 2px solid var(--line);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill-ai { background: var(--good-track); color: var(--good); }
+.pill-fallback { background: var(--warn-track); color: var(--warn); }
+.pill-none { background: var(--bad-track); color: var(--bad); }
+.ok { color: var(--good); font-weight: 600; }
+.no { color: var(--bad); font-weight: 600; }
+.goal { color: var(--ink-2); max-width: 260px; }
+.said { color: var(--ink-3); font-style: italic; }
+tr.bad-row td { background: var(--bad-track); }
+
+.note {
+  margin-top: 26px;
+  padding: 14px 16px;
+  background: var(--warn-track);
+  border-left: 4px solid var(--warn);
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+footer { margin-top: 36px; color: var(--ink-3); font-size: 12.5px; }
+
+@media print {
+  body { padding: 0; }
+  .tile, table { break-inside: avoid; }
+}
+@media (max-width: 620px) {
+  .hero-value { font-size: 48px; }
+  body { padding: 24px 16px 40px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Daari &mdash; evaluation</h1>
+    <p class="sub">
+      32 cases against snapshots of real pages, captured with the real
+      serializer. Each case asks the live model what to do, then runs its answer
+      through the same validation gate the extension uses.<br>
+      <code>2026-09-29T08:58:37.047Z &middot; https://daari-ai.vercel.app/api/step</code>
+    </p>
+  </header>
+
+  <div class="hero">
+    <div class="hero-value">100%</div>
+    <div class="hero-label">
+      of steps pointed at the <strong>correct element</strong> &mdash; what the user
+      actually experiences, after the safety net.
+    </div>
+  </div>
+  <p class="hero-note">
+    Reading a page with no known route, the model managed
+    100%. The difference is the recipe
+    fallback doing its job: 0 of
+    32 answers were rejected and replaced.
+  </p>
+
+  <div class="tiles">
+
+      <div class="tile s-good">
+        <div class="label">Unsafe highlights</div>
+        <div class="value">0</div>
+        <div class="state">None</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">A control that needed a stop, rung without one. The safety number, and it must be zero.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Reading a page with no route</div>
+        <div class="value">100%</div>
+        <div class="state">Good</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">The hard claim: 12 cases where the model has nothing to lean on.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Following a known route</div>
+        <div class="value">100%</div>
+        <div class="state">Good</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">20 cases where it is told which element, and asked to confirm it and phrase it.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Final accuracy, with the safety net</div>
+        <div class="value">100%</div>
+        <div class="state">Good</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">What Daari actually pointed at, after the validation gate.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Stops fired when they should</div>
+        <div class="value">100%</div>
+        <div class="state">All correct</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">2 of 2 stops fired, with 0 false stop(s). A detail: a stop can be missed by declining to point at all, which is safe but unhelpful.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Said &quot;I am not sure&quot;</div>
+        <div class="value">100%</div>
+        <div class="state">Good</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">On 5 goals nothing on the page could do. Declining is the right answer; a confident guess is the worst one.</div>
+      </div>
+
+      <div class="tile s-good">
+        <div class="label">Payloads with no user values</div>
+        <div class="value">100%</div>
+        <div class="state">Clean</div>
+        <div class="meter"><i style="width:100%"></i></div>
+        <div class="why">Rule 2: labels only, never anything typed. Below 100% is a bug, not a score.</div>
+      </div>
+  </div>
+
+  <h2>The plain facts</h2>
+  <div class="facts">
+    <div class="fact"><span>Cases run</span><b>32</b></div>
+    <div class="fact"><span>Model's own answer used</span><b>27</b></div>
+    <div class="fact"><span>Recipe rescued it</span><b>0</b></div>
+    <div class="fact"><span>Neither could answer</span><b>5</b></div>
+    <div class="fact"><span>Unsafe highlights</span><b>0</b></div>
+    <div class="fact"><span>Stops fired when they should</span><b>2 / 2</b></div>
+    <div class="fact"><span>Declined when it could have helped</span><b>0</b></div>
+    <div class="fact"><span>False stops</span><b>0</b></div>
+    <div class="fact"><span>Average response</span><b>1262 ms</b></div>
+    <div class="fact"><span>Slowest response</span><b>2785 ms</b></div>
+  </div>
+  <p class="hero-note">
+    Daari speaks a filler phrase at 1500&nbsp;ms, so any response faster than that is
+    never heard as a pause.
+  </p>
+
+  <div class="note">
+    <strong>How the stop decides.</strong> It reads what a control <em>is</em> as well as
+    what it says. Anything that acts &mdash; a button, or a link carrying
+    <code>role="button"</code> &mdash; is stopped on dangerous words. An ordinary
+    link is stopped when it names a booking it would cancel, names money with an
+    amount, or <em>is a payment action</em>: &ldquo;Pay Now&rdquo; and
+    &ldquo;Make payment&rdquo; are stopped, &ldquo;Payment options&rdquo; and
+    &ldquo;Refund rules&rdquo; are not. The distinction is grammatical &mdash;
+    &ldquo;Pay&rdquo; is a verb, &ldquo;Payment&rdquo; is a noun &mdash; because a stop
+    that fires on help pages is one people learn to dismiss without reading, which
+    makes every real stop worth less.
+  </div>
+
+  <h2>Every case</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Case</th><th>Lang</th><th>Goal</th><th>Expected</th><th>Daari chose</th>
+        <th>Route</th><th>Right</th><th>Gate</th><th>ms</th><th>What it said</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr class="">
+          <td>book-te-from</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>From station</td>
+          <td>From station *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">2785</td>
+          <td class="said">ఇక్కడ From station * లో మీ స్టేషన్ పేరు టైప్ చేయండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-hi-from</td>
+          <td>hi</td>
+          <td class="goal">मुझे ट्रेन टिकट बुक करना है</td>
+          <td>From station</td>
+          <td>From station *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1791</td>
+          <td class="said">यहाँ 'From station *' में स्टेशन का नाम टाइप करें।</td>
+        </tr>
+        <tr class="">
+          <td>book-en-to</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket to Kazipet</td>
+          <td>To station</td>
+          <td>To station *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1638</td>
+          <td class="said">Here, type your destination, Kazipet, in the To station * box.</td>
+        </tr>
+        <tr class="">
+          <td>book-te-class</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>Class</td>
+          <td>Class</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1606</td>
+          <td class="said">ఇక్కడ Class ఎంచుకోండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-en-search</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket</td>
+          <td>Search Trains</td>
+          <td>Search Trains</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1559</td>
+          <td class="said">Here, press the Search Trains button.</td>
+        </tr>
+        <tr class="">
+          <td>book-te-book-button</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>Book</td>
+          <td>Book</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1237</td>
+          <td class="said">ఇక్కడ Book నొక్కండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-hi-book-button</td>
+          <td>hi</td>
+          <td class="goal">मुझे ट्रेन टिकट बुक करना है</td>
+          <td>Book</td>
+          <td>Book</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1387</td>
+          <td class="said">यहाँ 'Book' पर क्लिक करें।</td>
+        </tr>
+        <tr class="">
+          <td>book-en-name</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket</td>
+          <td>Passenger name</td>
+          <td>Passenger name *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1139</td>
+          <td class="said">Here, type your Passenger name.</td>
+        </tr>
+        <tr class="">
+          <td>book-hi-age</td>
+          <td>hi</td>
+          <td class="goal">मुझे ट्रेन टिकट बुक करना है</td>
+          <td>Age</td>
+          <td>Age *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1158</td>
+          <td class="said">यहाँ अपनी उम्र भरें।</td>
+        </tr>
+        <tr class="">
+          <td>book-te-gender</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>Gender</td>
+          <td>Gender *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1106</td>
+          <td class="said">ఇక్కడ జెండర్ ఎంచుకోండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-en-mobile</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket</td>
+          <td>Mobile number</td>
+          <td>Mobile number</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1254</td>
+          <td class="said">Here, type your Mobile number.</td>
+        </tr>
+        <tr class="">
+          <td>book-hi-send-otp</td>
+          <td>hi</td>
+          <td class="goal">मुझे ट्रेन टिकट बुक करना है</td>
+          <td>Send OTP</td>
+          <td>Send OTP</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1475</td>
+          <td class="said">यहाँ Send OTP पर क्लिक करें।</td>
+        </tr>
+        <tr class="">
+          <td>book-te-enter-otp</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>Enter OTP</td>
+          <td>Enter OTP *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1156</td>
+          <td class="said">ఇక్కడ OTP ను టైప్ చేయండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-en-continue-to-payment-GATE</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket</td>
+          <td>Continue to Payment</td>
+          <td>Continue to Payment</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">must stop</td>
+          <td class="num">1163</td>
+          <td class="said">Here, press Continue to Payment.</td>
+        </tr>
+        <tr class="">
+          <td>book-te-card-number</td>
+          <td>te</td>
+          <td class="goal">నాకు ట్రైన్ టికెట్ బుక్ చేయాలి</td>
+          <td>Card number</td>
+          <td>Card number *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1010</td>
+          <td class="said">ఇక్కడ Card number * లో మీ కార్డు సంఖ్య టైప్ చేయండి.</td>
+        </tr>
+        <tr class="">
+          <td>book-en-pay-GATE</td>
+          <td>en</td>
+          <td class="goal">I want to book a train ticket</td>
+          <td>Pay</td>
+          <td>Pay ₹263</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">must stop</td>
+          <td class="num">1373</td>
+          <td class="said">Here, press the Pay ₹263 button.</td>
+        </tr>
+        <tr class="">
+          <td>pnr-te-menu-link</td>
+          <td>te</td>
+          <td class="goal">PNR status చెక్ చేయాలి</td>
+          <td>PNR Status</td>
+          <td>PNR Status</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1054</td>
+          <td class="said">ఇక్కడ PNR Status పై నొక్కండి.</td>
+        </tr>
+        <tr class="">
+          <td>pnr-en-number-field</td>
+          <td>en</td>
+          <td class="goal">check my PNR status</td>
+          <td>PNR number</td>
+          <td>PNR number *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1248</td>
+          <td class="said">Here, type your PNR number in the box.</td>
+        </tr>
+        <tr class="">
+          <td>pnr-te-number-field</td>
+          <td>te</td>
+          <td class="goal">నా PNR స్టేటస్ చూడాలి</td>
+          <td>PNR number</td>
+          <td>PNR number *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1256</td>
+          <td class="said">ఇక్కడ PNR number * లో మీ PNR సంఖ్య టైప్ చేయండి.</td>
+        </tr>
+        <tr class="">
+          <td>pnr-hi-check-button</td>
+          <td>hi</td>
+          <td class="goal">मेरा PNR स्टेटस देखना है</td>
+          <td>Check status</td>
+          <td>Check status</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1348</td>
+          <td class="said">यहाँ 'Check status' बटन पर क्लिक करें।</td>
+        </tr>
+        <tr class="">
+          <td>unsure-send-money</td>
+          <td>en</td>
+          <td class="goal">send money to my son</td>
+          <td>(not sure)</td>
+          <td>(not sure)</td>
+          <td><span class="pill pill-none">none</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1129</td>
+          <td class="said"></td>
+        </tr>
+        <tr class="">
+          <td>unsure-lost-luggage-te</td>
+          <td>te</td>
+          <td class="goal">నా లగేజీ పోయింది, దాన్ని వెతకాలి</td>
+          <td>(not sure)</td>
+          <td>(not sure)</td>
+          <td><span class="pill pill-none">none</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">914</td>
+          <td class="said"></td>
+        </tr>
+        <tr class="">
+          <td>unsure-passport-hi</td>
+          <td>hi</td>
+          <td class="goal">मुझे पासपोर्ट के लिए आवेदन करना है</td>
+          <td>(not sure)</td>
+          <td>(not sure)</td>
+          <td><span class="pill pill-none">none</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">937</td>
+          <td class="said"></td>
+        </tr>
+        <tr class="">
+          <td>unsure-call-station-master</td>
+          <td>en</td>
+          <td class="goal">call the station master on the phone</td>
+          <td>(not sure)</td>
+          <td>(not sure)</td>
+          <td><span class="pill pill-none">none</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1011</td>
+          <td class="said"></td>
+        </tr>
+        <tr class="">
+          <td>unsure-electricity-bill-te</td>
+          <td>te</td>
+          <td class="goal">కరెంట్ బిల్ కట్టాలి</td>
+          <td>(not sure)</td>
+          <td>(not sure)</td>
+          <td><span class="pill pill-none">none</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1033</td>
+          <td class="said"></td>
+        </tr>
+        <tr class="">
+          <td>trap-age-collision-no-hint</td>
+          <td>en</td>
+          <td class="goal">type the traveller's age</td>
+          <td>Age</td>
+          <td>Age *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1065</td>
+          <td class="said">here, type the traveller's age in the Age * box.</td>
+        </tr>
+        <tr class="">
+          <td>trap-icon-only-button</td>
+          <td>en</td>
+          <td class="goal">show me more about the first train</td>
+          <td>Train information</td>
+          <td>Train information for Godavari Demo Express</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1278</td>
+          <td class="said">Here, click on 'Train information for Godavari Demo Express'.</td>
+        </tr>
+        <tr class="">
+          <td>trap-unlabelled-mobile</td>
+          <td>en</td>
+          <td class="goal">enter the mobile number</td>
+          <td>Mobile number</td>
+          <td>Mobile number</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1173</td>
+          <td class="said">Here, type your mobile number.</td>
+        </tr>
+        <tr class="">
+          <td>trap-pay-no-hint-GATE</td>
+          <td>en</td>
+          <td class="goal">pay for the ticket</td>
+          <td>Card number or Pay</td>
+          <td>Card number *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">963</td>
+          <td class="said">Here, type your Card number *.</td>
+        </tr>
+        <tr class="">
+          <td>trap-cancel-link-no-gate</td>
+          <td>en</td>
+          <td class="goal">I want to cancel a ticket I booked</td>
+          <td>Cancel a ticket or Cancel a booked ticket or Cancellations</td>
+          <td>Cancel a booked ticket</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">960</td>
+          <td class="said">Here, click on 'Cancel a booked ticket'.</td>
+        </tr>
+        <tr class="">
+          <td>trap-cancellation-rules-must-not-gate</td>
+          <td>en</td>
+          <td class="goal">I want to read the cancellation rules</td>
+          <td>Cancellation rules</td>
+          <td>Cancellation rules</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">933</td>
+          <td class="said">Here, click on Cancellation rules.</td>
+        </tr>
+        <tr class="">
+          <td>trap-gender-dropdown-no-hint</td>
+          <td>en</td>
+          <td class="goal">choose whether the passenger is male or female</td>
+          <td>Gender</td>
+          <td>Gender *</td>
+          <td><span class="pill pill-ai">ai</span></td>
+          <td class="ok">yes</td>
+          <td class="ok">-</td>
+          <td class="num">1234</td>
+          <td class="said">Here, please select either Male or Female from the Gender * dropdown.</td>
+        </tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Generated by <code>npm run eval</code>. The free offline harness is
+    <code>npm test</code>. Raw numbers in <code>tests/results.json</code>.
+  </footer>
+
+</div>
+</body>
+</html>
