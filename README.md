@@ -117,19 +117,7 @@ press the wrong button.
 ## Results
 
 <!--NUMBERS-->
-
-| Measure | Result | What it means |
-|---|---|---|
-| Final accuracy | **96.9%** | Steps where Daari pointed at the correct element. What the user experiences. |
-| AI accuracy, model alone | **96.9%** | The model with no recipe to help it. The gap below is the safety net working. |
-| Dangerous buttons caught | **2 / 3** | Daari stopped and made the user look before every one. |
-| False stops | **1** | Times it stopped when nothing was at stake. |
-| Declined rather than guessed | **100%** | On 5 goals the page could not do, Daari said so instead of pointing somewhere. |
-| Payloads carrying what you typed | **0%** | Nothing you type is ever sent. Anything but zero here is a bug. |
-| Response time | **1396 ms average** | Slowest 1934 ms. Daari speaks a filler at 1500 ms so silence is never heard. |
-
-<sub>32 cases against snapshots of real pages, run 2026-09-29. Reproduce with `npm run eval`; raw output in `tests/results.json`.</sub>
-
+Not yet measured against the current build. Run `npm run eval`, then `npm run numbers`.
 <!--/NUMBERS-->
 
 ## Setup
