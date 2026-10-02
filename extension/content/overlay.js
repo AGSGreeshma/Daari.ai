@@ -820,7 +820,11 @@
        there is nothing here that could be rung even by mistake. */
     if (payload.gate) {
       hideRing();
-      announce(say, payload.stepLabel, 'lost', lang);
+      /* 'gate', not 'lost': the stop before paying is the moment the whole
+         product exists for, and it should not look like "I am not sure". The
+         amber card and the raised hand are its own. Styling only -- the gate
+         decision itself is unchanged and still made in code, in safety.js. */
+      announce(say, payload.stepLabel, 'gate', lang);
       return;
     }
 
@@ -845,7 +849,7 @@
     if (entry && DAARI_MUST_CONFIRM(entry.data) && !payload.confirmed) {
       console.error('[Daari] refused to highlight an unconfirmed gated element: ' + name);
       hideRing();
-      announce(DAARI_T(S.ui.confirmBeforePay, lang), DAARI_T(S.ui.checkFirst, lang), 'lost', lang);
+      announce(DAARI_T(S.ui.confirmBeforePay, lang), DAARI_T(S.ui.checkFirst, lang), 'gate', lang);
       return;
     }
 

@@ -3,10 +3,20 @@
    These rules are loaded INTO our Shadow DOM, not into the page, so the
    website's own stylesheet cannot reach them and ours cannot damage the page.
 
-   overlay.js fetches this file and applies it as a "constructable
-   stylesheet". That route was chosen over a <link> tag because a website
-   with a strict Content-Security-Policy can block an extension stylesheet
-   link, and a constructable stylesheet is not subject to page CSP at all. */
+   overlay.js fetches tokens.css and this file, joins them, and applies the
+   result as a "constructable stylesheet". That route was chosen over a <link>
+   tag because a website with a strict Content-Security-Policy can block an
+   extension stylesheet link, and a constructable stylesheet is not subject to
+   page CSP at all. The tokens must be prepended because a constructable sheet
+   cannot @import.
+
+   Every class here is one overlay.js already sets:
+     .layer  .ring  .caption  .caption .say  .caption .step
+     .caption.done   finished
+     .caption.gate   the stop before paying
+     .caption.lost   "I am not sure about this page"
+     .caption.hint   pick the right suggestion
+   None was renamed. */
 
 /* Everything sits inside a full-screen, click-through layer. pointer-events
    none is essential: the user must be able to click the page THROUGH our
@@ -15,20 +25,44 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
+  font-family: var(--font);
 }
 
-/* ---------- the pointing finger: a pulsing orange ring ---------- */
+/* ---------- the pointing finger: a marigold ring with a soft glow ---------- */
 .ring {
   position: absolute;
   display: none;
-  border: 4px solid #ff8c1a;
-  border-radius: 9px;
+  border: 4px solid var(--marigold);
+  border-radius: 12px;
   transform-origin: center;
   animation: pulse 1.4s ease-in-out infinite;
   box-shadow:
-    0 0 0 4px rgba(255, 140, 26, 0.30),
-    0 0 20px 7px rgba(255, 140, 26, 0.55),
-    inset 0 0 12px rgba(255, 140, 26, 0.35);
+    0 0 0 4px rgba(242, 160, 7, 0.26),
+    0 0 22px 8px rgba(242, 160, 7, 0.46),
+    inset 0 0 12px rgba(242, 160, 7, 0.28);
+}
+
+/* A small tag on the ring, so there is no doubt which thing is meant even with
+   the sound off and the caption not yet read. Drawn as a pseudo-element: the
+   overlay needs no extra node for it, and nothing in the page can see it.
+
+   Sits above the ring, pulled left to its edge. If the ring is at the very top
+   of the window the tag would be off screen, so it flips below -- done with a
+   second rule rather than script, because the overlay must stay cheap. */
+.ring::after {
+  content: '\1F446\00A0here';         /* a pointing-up hand */
+  position: absolute;
+  left: -4px;
+  bottom: calc(100% + 8px);
+  padding: 4px 11px;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--marigold);
+  border-radius: 999px;
+  /* Indigo on marigold is 6.39:1; white on marigold fails at 2.14:1. */
+  color: var(--indigo);
+  box-shadow: 0 2px 8px rgba(30, 42, 90, 0.3);
 }
 
 @keyframes pulse {
@@ -36,41 +70,39 @@
   50%      { opacity: 0.62; transform: scale(1.035); }
 }
 
-/* ---------- the caption bubble ---------- */
+/* ---------- the caption: a floating card at the bottom of the page ---------- */
 .caption {
   position: absolute;
   left: 50%;
-  bottom: 26px;
+  bottom: 28px;
   transform: translateX(-50%);
   display: none;
   box-sizing: border-box;
   width: max-content;
   max-width: 88vw;
-  padding: 16px 24px;
-  border: 3px solid #ff8c1a;
-  border-radius: 14px;
-  background: #15171a;
-  color: #ffffff;
-  text-align: center;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-
-  /* Nirmala UI ships with Windows and covers Telugu and Devanagari, so
-     Telugu and Hindi captions render properly rather than as empty boxes. */
-  font-family: "Nirmala UI", "Noto Sans Telugu", "Noto Sans Devanagari",
-               "Segoe UI", system-ui, sans-serif;
+  padding: 16px 22px 16px 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  /* The thin marigold accent down the left edge, which is the one thing that
+     makes a card on an unknown website read as Daari's. */
+  border-left: 5px solid var(--marigold);
+  border-radius: var(--radius);
+  color: var(--indigo);
+  text-align: left;
+  box-shadow: 0 10px 34px rgba(30, 42, 90, 0.28);
 }
 
-/* The instruction itself. Never below 20px -- these users are elderly or
-   new to computers, and the caption is a full channel alongside the voice,
-   not a subtitle. */
+/* The instruction itself. Never below 20px -- these users are elderly or new
+   to computers, and the caption is a full channel alongside the voice, not a
+   subtitle. */
 .caption .say {
-  font-size: 23px;
+  font-size: 24px;
   line-height: 1.45;
   font-weight: 600;
 }
 
 /* Telugu is read, not spoken -- the fetched voice was not clear enough, so the
-   caption is now the ONLY channel for the primary persona. It gets more room.
+   caption is the ONLY channel for the primary persona. It gets more room.
    Telugu script also needs a little more height than Latin at the same size. */
 .caption:lang(te) .say {
   font-size: 28px;
@@ -78,21 +110,53 @@
 }
 
 .caption .step {
-  font-size: 13px;
+  margin-bottom: 7px;
+  font-size: var(--text-label);
+  font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: #ffb866;
-  margin-bottom: 7px;
+  color: var(--indigo-soft);
 }
 
-.caption.done { border-color: #37b24d; }
+/* ---- finished ---- */
+.caption.done {
+  border-left-color: var(--green);
+  background: var(--green-wash);
+}
 .caption.done .say { font-size: 27px; }
-.caption.done .step { color: #8ce99a; }
+.caption.done .step { color: var(--ink-good); }
 
-.caption.lost { border-color: #ffd43b; }
+/* ---- the stop before paying ----
+   Amber, wider accent, and the only caption that gets a mark of its own. This
+   is the moment the whole product exists for. */
+.caption.gate {
+  border-left-width: 8px;
+  border-left-color: var(--amber);
+  background: var(--amber-wash);
+}
+.caption.gate .step { color: var(--ink-warn); }
+.caption.gate .say::before {
+  content: '\270B\00A0\00A0';          /* a raised hand */
+}
 
-/* Some people get motion sick, and a pulsing ring is exactly the kind of
-   thing that does it. Honour the system setting. */
+/* ---- "I am not sure about this page" ----
+   Calm. A wrong instruction is worse than no instruction, so admitting it must
+   not look like an error the user caused. */
+.caption.lost {
+  border-left-color: var(--indigo-soft);
+  background: var(--card);
+}
+.caption.lost .step { color: var(--indigo-soft); }
+
+/* ---- pick the right suggestion ---- */
+.caption.hint {
+  border-left-color: var(--marigold);
+  background: var(--marigold-wash);
+}
+
+/* Some people get motion sick, and a pulsing ring is exactly the kind of thing
+   that does it. tokens.css disables animation globally under this setting; the
+   ring is named again here so the intent is impossible to miss. */
 @media (prefers-reduced-motion: reduce) {
   .ring { animation: none; }
 }

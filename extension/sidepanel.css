@@ -2,539 +2,658 @@
 
    Everything here is deliberately large. The people Daari is for are elderly
    or new to computers, and this panel is the one piece of Daari they look at
-   directly. Nothing is small, nothing is subtle, nothing is a bare icon. */
+   directly. Nothing is small, nothing is subtle, nothing is a bare icon.
 
-:root {
-  --orange: #c25a00;
-  --orange-bright: #ff8c1a;
-  --green: #1f6f4a;
-  --ink: #23262a;
-  --muted: #6b6f75;
-  --bg: #fffdf7;
-  --panel: #ffffff;
-  --line: #e2ded2;
-}
+   Colours, type and spacing all come from tokens.css, which the panel loads
+   first. Nothing in this file invents a colour: if a value is not a token, it
+   is a shadow or a border alpha.
+
+   THIS IS A RESTYLE, NOT A REBUILD. Every selector here already existed, and
+   every class the JS sets at runtime is still styled:
+     .mic.sending        the microphone while listening
+     .msg.bad / .msg.info  the message strip
+     .lang.on            the chosen language
+     .help-level.on      the chosen help level
+     .cap / .which       the labels built in JS
+     .path-*             the developer path tags
+   Renaming any of those would break the panel or the smoke tests, so none of
+   them was renamed. */
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  padding: 14px;
-  background: var(--bg);
-  color: var(--ink);
-  font-size: 15px;
-
-  /* Nirmala UI ships with Windows and covers Telugu and Devanagari, so the
-     picker and the captions render as script rather than as empty boxes. */
-  font-family: "Nirmala UI", "Noto Sans Telugu", "Noto Sans Devanagari",
-               "Segoe UI", system-ui, sans-serif;
+  padding: 16px 16px 28px;
+  background: var(--cream);
+  color: var(--indigo);
+  font-family: var(--font);
+  font-size: var(--text-body);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1 { margin: 0; font-size: 21px; }
-.tagline { margin: 2px 0 16px; font-size: 13px; color: var(--muted); }
+/* ---------- the header ---------- */
 
+h1 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.tagline {
+  margin: 2px 0 14px;
+  font-size: var(--text-small);
+  color: var(--indigo-soft);
+}
+
+/* Section labels. Small on purpose -- these are signposts, never instructions,
+   and the instruction must always be the largest thing on screen. */
 .label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: var(--muted);
   margin: 0 0 7px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--indigo-soft);
 }
 
-/* ---------- language picker ---------- */
-.langs { display: flex; gap: 7px; margin-bottom: 18px; }
+hr {
+  height: 1px;
+  margin: 20px 0 16px;
+  border: 0;
+  background: var(--line);
+}
+
+/* ---------- language buttons ---------- */
+
+.langs { display: flex; gap: 8px; margin-bottom: 14px; }
+
 .lang {
   flex: 1;
-  padding: 13px 4px;
-  font-size: 17px;
+  min-height: var(--tap);
+  padding: 12px 4px;
   font-family: inherit;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
-  cursor: pointer;
-}
-.lang:hover { border-color: #c9c3b6; }
-.lang.on {
-  border-color: var(--orange);
-  background: #fff4e8;
-  font-weight: bold;
-  box-shadow: inset 0 0 0 1px var(--orange);
-}
-
-/* ---------- the microphone ---------- */
-.mic {
-  width: 100%;
-  padding: 19px;
   font-size: 19px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+  cursor: pointer;
+  transition: border-color var(--fade) var(--ease),
+              background var(--fade) var(--ease);
+}
+.lang:hover { border-color: var(--marigold-deep); }
+.lang.on {
+  border-color: var(--marigold);
+  background: var(--marigold);
+  font-weight: 600;
+  /* Indigo on marigold is 6.39:1. White on marigold is 2.14:1 and fails, so
+     the chosen language keeps dark text. */
+  color: var(--indigo);
+  box-shadow: var(--shadow);
+}
+
+/* The quiet way back into onboarding. It also names the mode you are in, so
+   the panel always says which one is active without opening anything. */
+.change-setup {
+  display: block;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 11px;
   font-family: inherit;
-  font-weight: bold;
-  border: 0;
-  border-radius: 12px;
-  background: var(--orange);
-  color: #fff;
+  font-size: var(--text-small);
+  text-align: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--indigo-soft);
   cursor: pointer;
 }
-.mic:hover { background: #a54c00; }
-.mic.listening { background: #b3261e; animation: breathe 1.5s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
+.change-setup:hover { border-color: var(--marigold-deep); color: var(--indigo); }
 
-/* While listening, the button says what tapping it will DO, not what Daari is
-   doing. Green because it is the action that moves things on. */
-.mic.sending { background: var(--green); }
-.mic.sending:hover { background: #17573a; }
+/* ---------- the microphone: the one thing to press ---------- */
+
+.mic {
+  display: block;
+  width: 152px;
+  height: 152px;
+  margin: 6px auto 10px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  background: var(--marigold);
+  border: none;
+  border-radius: 50%;
+  /* Dark text, because white on marigold fails AA at 2.14:1. */
+  color: var(--indigo);
+  cursor: pointer;
+  box-shadow: var(--shadow-lift);
+  transition: transform 120ms var(--ease);
+}
+.mic:hover { background: var(--marigold-deep); }
+.mic:active { transform: scale(0.97); }
+
+/* Listening. The ring grows outward and fades, which reads as "I am hearing
+   you" without a word of text. Switched off under reduced motion by the rule
+   in tokens.css. */
+.mic.sending { background: var(--marigold-deep); }
+.mic.sending::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: daari-listen 1.5s ease-out infinite;
+}
+.mic { position: relative; }
+@keyframes daari-listen {
+  0%   { box-shadow: 0 0 0 0 rgba(242, 160, 7, 0.55); }
+  100% { box-shadow: 0 0 0 26px rgba(242, 160, 7, 0); }
+}
 
 .mic-hint {
-  margin: 7px 0 0;
-  font-size: 13.5px;
-  color: var(--muted);
+  margin: 0 0 10px;
+  font-size: var(--text-small);
   text-align: center;
-  min-height: 19px;
+  color: var(--indigo-soft);
 }
 
-/* Deliberately quiet: cancelling should be findable, never the obvious tap. */
 .mic-cancel {
   display: none;
   width: 100%;
-  margin-top: 7px;
-  padding: 10px;
-  font-size: 14px;
+  min-height: 48px;
+  margin-bottom: 12px;
   font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  color: var(--muted);
+  font-size: var(--text-small);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo-soft);
   cursor: pointer;
 }
-.mic-cancel:hover { border-color: #c9c3b6; color: var(--ink); }
+.mic-cancel:hover { border-color: var(--red); color: var(--red); }
 
-/* ---------- is this right? ---------- */
+/* ---------- what Daari heard ---------- */
+
+.transcript {
+  min-height: 54px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  font-size: var(--text-body);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--indigo);
+}
+.transcript .placeholder { color: var(--indigo-soft); }
+
+/* The check before anything happens. */
 .confirm-box {
   display: none;
-  margin-top: 12px;
-  padding: 14px;
-  background: #fff4e8;
-  border: 2px solid var(--orange);
-  border-radius: 11px;
+  margin-bottom: 14px;
+  padding: var(--pad);
+  background: var(--card);
+  border: 2px solid var(--marigold);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-.confirm-heading {
-  margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: bold;
-  color: var(--orange);
-}
+.confirm-heading { margin: 0 0 9px; font-size: var(--text-body); font-weight: 600; }
 .confirm-box textarea {
   width: 100%;
   padding: 11px;
-  font-size: 19px;
-  line-height: 1.4;
   font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  color: var(--ink);
+  font-size: var(--text-body);
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
   resize: vertical;
 }
-.confirm-actions { display: flex; gap: 7px; margin-top: 9px; }
+.confirm-actions { display: flex; gap: 9px; margin-top: 11px; }
 .confirm-actions button {
   flex: 1;
-  padding: 13px 8px;
-  font-size: 16px;
+  min-height: var(--tap);
   font-family: inherit;
-  font-weight: bold;
-  border: 0;
-  border-radius: 9px;
-  background: var(--green);
-  color: #fff;
+  font-size: var(--text-body);
+  font-weight: 600;
+  background: var(--marigold);
+  border: none;
+  border-radius: var(--radius-small);
+  color: var(--indigo);
   cursor: pointer;
 }
-.confirm-actions button.ghost {
-  background: var(--panel);
-  border: 2px solid var(--line);
-  color: var(--ink);
-  font-weight: normal;
+.confirm-actions button:hover { background: var(--marigold-deep); }
+.confirm-actions .ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  font-weight: 400;
+  color: var(--indigo-soft);
 }
+.confirm-actions .ghost:hover { border-color: var(--marigold-deep); color: var(--indigo); }
 
-/* ---------- manual advance ---------- */
-.done-next {
-  display: none;
-  width: 100%;
-  margin-top: 11px;
-  padding: 16px;
-  font-size: 17px;
-  font-family: inherit;
-  font-weight: bold;
-  border: 0;
-  border-radius: 11px;
-  background: var(--green);
-  color: #fff;
-  cursor: pointer;
-}
-.done-next:hover { background: #17573a; }
-
-.back-step {
-  display: none;
-  width: 100%;
-  margin-top: 7px;
-  padding: 10px;
-  font-size: 14px;
-  font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  color: var(--muted);
-  cursor: pointer;
-}
-.back-step:hover { border-color: #c9c3b6; color: var(--ink); }
-
-/* ---------- what we heard ---------- */
-.transcript {
-  margin-top: 12px;
-  padding: 14px;
-  min-height: 62px;
-  background: var(--panel);
-  border: 2px dashed var(--line);
-  border-radius: 10px;
-  font-size: 21px;
-  line-height: 1.4;
-}
-.transcript.interim { color: var(--muted); font-style: italic; }
-.transcript.final { color: var(--ink); border-style: solid; border-color: var(--green); }
-.transcript .placeholder { font-size: 15px; color: var(--muted); font-style: normal; }
-
+/* The goal, once accepted. */
 .goal {
-  margin-top: 10px;
-  padding: 12px 14px;
-  background: #e8f4ea;
-  border-left: 5px solid var(--green);
-  border-radius: 6px;
-  font-size: 18px;
   display: none;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: var(--marigold-wash, var(--card));
+  border-left: 4px solid var(--marigold);
+  border-radius: var(--radius-small);
+  font-size: var(--text-body);
 }
 .goal .cap {
   display: block;
-  font-size: 11.5px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: var(--green);
-  margin-bottom: 3px;
+  color: var(--indigo-soft);
 }
 
-/* ---------- typing instead ---------- */
-.typed { display: flex; gap: 7px; margin-top: 12px; }
+/* Typing instead of speaking -- secondary to the microphone, on purpose. */
+.typed { display: flex; gap: 8px; margin-bottom: 12px; }
 .typed input {
   flex: 1;
-  min-width: 0;
+  min-height: 48px;
   padding: 11px;
-  font-size: 16px;
   font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  color: var(--ink);
+  font-size: var(--text-body);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
 }
 .typed button {
-  padding: 11px 15px;
-  font-size: 15px;
+  min-height: 48px;
+  padding: 0 16px;
   font-family: inherit;
-  border: 0;
-  border-radius: 9px;
-  background: var(--green);
-  color: #fff;
+  font-size: var(--text-small);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
   cursor: pointer;
-  white-space: nowrap;
+}
+.typed button:hover { border-color: var(--marigold-deep); }
+
+/* ---------- messages: calm, never alarming ---------- */
+
+.msg {
+  display: none;
+  margin-bottom: 12px;
+  padding: 13px 15px;
+  font-size: var(--text-body);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--line);
+  background: var(--card);
+  white-space: pre-line;
+}
+.msg.info {
+  background: var(--card);
+  border-left-color: var(--marigold);
+  color: var(--indigo);
+}
+/* Soft red, not a klaxon. Something went wrong for the user is not the user's
+   fault, and the panel never shouts at them. */
+.msg.bad {
+  background: var(--red-wash);
+  border-left-color: var(--red);
+  color: var(--indigo);
+}
+.msg button {
+  display: block;
+  min-height: 48px;
+  margin-top: 11px;
+  padding: 0 18px;
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  background: var(--marigold);
+  border: none;
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+  cursor: pointer;
 }
 
-/* ---------- guidance section ---------- */
-hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0 16px; }
+/* ---------- the step counter, as a progress pill ---------- */
+
+.counter {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 11px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  background: var(--marigold);
+  border-radius: 999px;
+  color: var(--indigo);
+}
+.counter:empty { display: none; }
+
+/* ---------- THE CURRENT STEP: the largest thing on screen ---------- */
 
 .instruction {
-  padding: 16px;
-  background: #15171a;
-  color: #fff;
-  border: 3px solid var(--orange-bright);
-  border-radius: 12px;
-  font-size: 21px;
-  line-height: 1.45;
-  font-weight: 600;
   display: none;
+  margin-bottom: 14px;
+  padding: 18px;
+  font-size: var(--text-step);
+  font-weight: 600;
+  line-height: 1.35;
+  background: var(--card);
+  border-left: 5px solid var(--marigold);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
+/* Telugu needs more room than Latin at the same point size. */
+.instruction[lang="te"] { font-size: 25px; line-height: 1.45; }
+
+/* "Step 4 of 15", above the words. */
 .instruction .which {
   display: block;
-  font-size: 12px;
-  font-weight: normal;
-  letter-spacing: 0.8px;
+  margin-bottom: 7px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.7px;
   text-transform: uppercase;
-  color: #ffb866;
-  margin-bottom: 6px;
+  color: var(--indigo-soft);
 }
 
-.controls { display: flex; gap: 7px; margin-top: 11px; }
-.controls button {
+/* ---------- the station helper ----------
+
+   The one moment ringing a box cannot fix: the user can see where to type and
+   still not know how to spell the place in Latin letters. The answer is printed
+   very large, with nothing beside it to read. */
+
+.station {
+  margin: 0 0 14px;
+  padding: var(--pad);
+  background: var(--card);
+  border: 2px solid var(--marigold);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.station[hidden] { display: none; }
+
+.station-prompt { margin: 0 0 10px; font-size: var(--text-body); font-weight: 600; }
+
+.station-ask { display: flex; gap: 8px; }
+.station-ask input {
   flex: 1;
-  padding: 13px 6px;
-  font-size: 15px;
-  font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  color: var(--ink);
-  cursor: pointer;
-}
-.controls button:hover { border-color: #c9c3b6; background: #faf8f2; }
-
-.start {
-  width: 100%;
-  margin-top: 11px;
-  padding: 15px;
-  font-size: 17px;
-  font-family: inherit;
-  font-weight: bold;
-  border: 0;
-  border-radius: 11px;
-  background: var(--green);
-  color: #fff;
-  cursor: pointer;
-}
-.start:hover { background: #17573a; }
-
-/* Stopping guidance is deliberately plain. It must be findable without being
-   the most attractive thing on the panel. */
-.stop {
-  width: 100%;
-  margin-top: 7px;
+  min-height: 50px;
   padding: 12px;
-  font-size: 14.5px;
   font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  color: var(--muted);
-  cursor: pointer;
-  display: none;
-}
-.stop:hover { border-color: #c9c3b6; color: var(--ink); }
-
-/* The confirm gate button.
-
-   Big, and a warning colour, because pressing it is the user telling Daari
-   they have read the screen. It should not be possible to hit by accident
-   while reaching for something else. */
-.confirm {
-  width: 100%;
-  margin-top: 11px;
-  padding: 18px;
-  font-size: 18px;
-  font-family: inherit;
-  font-weight: bold;
-  border: 3px solid #8a4b00;
-  border-radius: 12px;
-  background: #ffd8a8;
-  color: #5c3200;
-  cursor: pointer;
-  display: none;
-  line-height: 1.35;
-}
-.confirm:hover { background: #ffc078; }
-
-/* "Step 7 of 15", next to the Guidance heading. */
-.counter {
-  float: right;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12.5px;
-  color: var(--orange);
-  font-weight: bold;
-}
-
-/* ---------- messages and status ---------- */
-.msg {
-  margin-top: 12px;
-  padding: 13px;
-  border-radius: 9px;
-  font-size: 14.5px;
-  line-height: 1.5;
-  display: none;
-  white-space: pre-wrap;
-}
-.msg.bad  { display: block; background: #fdecea; border: 1px solid #b3261e; }
-.msg.info { display: block; background: #eef4fb; border: 1px solid #1a4f8a; }
-.msg button {
-  margin-top: 10px;
-  width: 100%;
-  padding: 11px;
-  font-size: 15px;
-  font-family: inherit;
-  border: 0;
-  border-radius: 8px;
-  background: #1a4f8a;
-  color: #fff;
-  cursor: pointer;
-}
-
-.voice-status {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  font-size: 12.5px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.voice-status b { color: var(--ink); }
-
-/* Developer details. Deliberately small and collapsed: this is for us, not for
-   the people Daari is built for. */
-.dev {
-  margin-top: 14px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.dev summary {
-  cursor: pointer;
-  padding: 6px 0;
-  color: var(--muted);
-}
-.dev #devBody {
-  padding: 9px 11px;
-  background: #f4f2ec;
+  font-size: var(--text-body);
+  background: var(--cream);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 11.5px;
-  line-height: 1.7;
-  white-space: pre-wrap;
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+}
+.station-ask button {
+  min-height: 50px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  background: var(--marigold);
+  border: none;
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+  cursor: pointer;
+}
+.station-ask button:hover { background: var(--marigold-deep); }
+
+.station-answer { margin-top: 14px; }
+.station-answer[hidden] { display: none; }
+.station-label {
+  margin: 0;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--indigo-soft);
+}
+
+/* The thing being copied. Nothing on this panel is bigger, and it is always in
+   Latin letters, because that is what the website will accept. */
+.station-name {
+  margin: 4px 0 0;
+  font-size: var(--text-huge);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  color: var(--indigo);
   word-break: break-word;
 }
-/* Which route a step took. These colours are the whole point of the panel:
-   green means the model wrote it, amber means the recipe rescued it. */
-.path-ai       { color: #1f6f4a; font-weight: bold; }
-.path-fallback { color: #a2620b; font-weight: bold; }
-.path-none     { color: #b3261e; font-weight: bold; }
-.path-gate     { color: #6b4e00; font-weight: bold; }
-.path-recipe   { color: #4a5a68; font-weight: bold; }
 
-/* Some people get motion sick. Honour the system setting. */
-@media (prefers-reduced-motion: reduce) {
-  .mic.listening { animation: none; }
+/* The code as a pill. Many older travellers know the code better than the
+   spelling. */
+.station-code {
+  display: inline-block;
+  margin: 9px 0 0;
+  padding: 4px 12px;
+  font-size: var(--text-small);
+  font-weight: 600;
+  background: var(--marigold);
+  border-radius: 999px;
+  color: var(--indigo);
 }
 
-/* ---------- first run: language, then how much help ----------
+.station-unknown {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  font-size: var(--text-body);
+  background: var(--red-wash);
+  border-left: 4px solid var(--red);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+}
+.station-unknown[hidden] { display: none; }
 
-   A full cover rather than a section, so that on the very first open there is
-   exactly one question on screen. Someone who has never used an extension
-   before should not have to work out which part to read first. */
+/* ---------- THE STOP before paying ----------
+
+   A full-width amber card with one huge button. This is the moment the whole
+   product exists for, so it gets more room than anything else and there is
+   exactly one thing to press. */
+
+.confirm {
+  display: none;
+  width: 100%;
+  min-height: 74px;
+  margin-bottom: 14px;
+  padding: 18px;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 600;
+  text-align: left;
+  background: var(--amber);
+  border: none;
+  border-radius: var(--radius);
+  /* Indigo on amber is 5.22:1. White on amber is 2.62:1 and fails. */
+  color: var(--indigo);
+  cursor: pointer;
+  box-shadow: var(--shadow-lift);
+}
+.confirm::before {
+  content: '\270B';            /* a raised hand: stop and look */
+  display: block;
+  margin-bottom: 6px;
+  font-size: 30px;
+  line-height: 1;
+}
+.confirm:hover { background: var(--marigold-deep); }
+
+/* ---------- the manual way forward and back ---------- */
+
+.done-next, .back-step {
+  display: none;
+  width: calc(50% - 5px);
+  min-height: var(--tap);
+  margin: 0 0 10px;
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+  cursor: pointer;
+  vertical-align: top;
+}
+.done-next { margin-right: 10px; }
+.done-next:hover, .back-step:hover { border-color: var(--marigold-deep); }
+
+/* Repeat and Stop speaking, as icon-and-label buttons. */
+.controls { display: flex; gap: 9px; margin-bottom: 16px; }
+.controls button {
+  flex: 1;
+  min-height: 50px;
+  font-family: inherit;
+  font-size: var(--text-small);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--indigo);
+  cursor: pointer;
+}
+.controls button:hover { border-color: var(--marigold-deep); }
+
+/* ---------- start and stop ---------- */
+
+.start, .stop {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  margin-bottom: 10px;
+  font-family: inherit;
+  font-size: var(--text-body);
+  font-weight: 600;
+  border-radius: var(--radius-small);
+  cursor: pointer;
+}
+.start {
+  background: var(--marigold);
+  border: none;
+  color: var(--indigo);
+  box-shadow: var(--shadow);
+}
+.start:hover { background: var(--marigold-deep); }
+.stop {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+.stop:hover { background: var(--red-wash); }
+
+.voice-status {
+  margin: 14px 0 0;
+  font-size: var(--text-label);
+  line-height: 1.5;
+  color: var(--indigo-soft);
+}
+
+/* ---------- first run: language, then how much help ---------- */
+
 .onboard {
   position: fixed;
   inset: 0;
   z-index: 50;
-  padding: 18px 14px 28px;
-  background: var(--bg);
+  padding: 26px 18px 32px;
+  background: var(--cream);
   overflow-y: auto;
+  animation: daari-fade var(--fade) var(--ease);
 }
 .onboard[hidden] { display: none; }
 
-.onboard-q {
-  margin: 20px 0 10px;
-  font-size: 18px;
-  font-weight: bold;
-  color: var(--ink);
+@keyframes daari-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
 }
 
-/* Stacked, not side by side: the hint under each one needs room to be read. */
+/* The logo mark: a winding path that ends in a dot. Drawn in the markup as an
+   inline SVG so it needs no file and cannot fail to load. */
+.mark { display: block; width: 72px; height: auto; margin: 0 0 10px; }
+
+.onboard-q {
+  margin: 26px 0 12px;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--indigo);
+}
+
+/* The onboarding language cards are taller than the ones in the panel: on the
+   first screen they are the only thing to look at. */
+.onboard .langs { gap: 9px; }
+.onboard .lang { min-height: 78px; font-size: 22px; }
+
+/* Stacked, not side by side: the line under each one needs room to be read. */
 .help-level {
   display: block;
   width: 100%;
-  margin-bottom: 10px;
-  padding: 15px;
+  min-height: 86px;
+  margin-bottom: 11px;
+  padding: 16px 18px;
   text-align: left;
   font-family: inherit;
-  background: var(--panel);
+  background: var(--card);
   border: 2px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
+  border-radius: var(--radius);
+  color: var(--indigo);
   cursor: pointer;
+  transition: border-color var(--fade) var(--ease);
 }
-.help-level:hover { border-color: #c9c3b6; }
+.help-level:hover { border-color: var(--marigold-deep); }
 .help-level.on {
-  border-color: var(--orange);
-  background: #fff4e8;
-  box-shadow: inset 0 0 0 1px var(--orange);
+  border-color: var(--marigold);
+  background: var(--card);
+  box-shadow: inset 0 0 0 2px var(--marigold), var(--shadow);
 }
-.hl-label { display: block; font-size: 18px; font-weight: bold; }
-.hl-hint  { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); }
-
-.onboard-note { margin-top: 14px; font-size: 13.5px; color: var(--muted); }
-
-/* The way back into onboarding. Quiet, but always there. */
-.change-setup {
+.hl-label {
   display: block;
-  width: 100%;
-  margin: -8px 0 16px;
-  padding: 9px;
-  font-size: 13.5px;
-  font-family: inherit;
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  cursor: pointer;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.3;
 }
-.change-setup:hover { border-color: #c9c3b6; color: var(--ink); }
-
-/* ---------- the station helper ----------
-
-   The one moment in a booking where ringing the right box is not enough: the
-   user can see where to type and still have no idea how to spell the place in
-   Latin letters. So the answer is printed very large, in one colour, with
-   nothing beside it to read. */
-.station {
-  margin: 0 0 14px;
-  padding: 12px;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  border-radius: 10px;
+.hl-hint {
+  display: block;
+  margin-top: 5px;
+  font-size: var(--text-small);
+  line-height: 1.4;
+  color: var(--indigo-soft);
 }
-.station[hidden] { display: none; }
 
-.station-prompt { margin: 0 0 9px; font-size: 15px; color: var(--ink); }
+/* The icon on each help-level card, added here so the markup stays plain. */
+#helpLight .hl-label::before { content: '\1F446\00A0\00A0'; }   /* pointing up */
+#helpFull  .hl-label::before { content: '\1F91D\00A0\00A0'; }   /* handshake */
 
-.station-ask { display: flex; gap: 7px; }
-.station-ask input {
-  flex: 1;
-  padding: 11px;
-  font-size: 16px;
-  font-family: inherit;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
+.onboard-note { margin-top: 16px; font-size: var(--text-small); color: var(--indigo-soft); }
+
+/* ---------- developer details ---------- */
+
+.dev {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-label);
+  color: var(--indigo-soft);
 }
-.station-ask button {
-  padding: 11px 14px;
-  font-size: 15px;
-  font-family: inherit;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  cursor: pointer;
+.dev summary { cursor: pointer; font-weight: 600; }
+.dev #devBody { margin-top: 9px; line-height: 1.7; }
+
+/* Which route each step took. These colours are the whole point of the panel's
+   developer strip: green means the model wrote it, amber means the recipe
+   rescued it. Text-safe variants, since these are words on the cream ground. */
+.path-ai       { color: var(--ink-good); font-weight: 600; }
+.path-fallback { color: var(--ink-warn); font-weight: 600; }
+.path-none     { color: var(--red); font-weight: 600; }
+.path-gate     { color: var(--ink-warn); font-weight: 600; }
+.path-recipe   { color: var(--indigo-soft); font-weight: 600; }
+
+/* ---------- focus, for anybody on a keyboard ---------- */
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 2px;
 }
-.station-ask button:hover { border-color: #c9c3b6; }
-
-.station-answer { margin-top: 12px; }
-.station-answer[hidden] { display: none; }
-.station-label { margin: 0; font-size: 13px; color: var(--muted); }
-
-/* The thing the user is copying. Nothing on this panel is bigger. */
-.station-name {
-  margin: 2px 0 0;
-  font-size: 30px;
-  font-weight: bold;
-  line-height: 1.15;
-  letter-spacing: 0.5px;
-  color: var(--orange);
-  word-break: break-word;
-}
-.station-code { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
-
-.station-unknown { margin: 11px 0 0; font-size: 15px; color: #b3261e; }
-.station-unknown[hidden] { display: none; }

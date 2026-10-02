@@ -75,6 +75,7 @@
   /* ---- the palette ---- */
   --marigold: #F2A007;        /* the one primary action on screen */
   --marigold-deep: #D98A05;   /* its pressed/edge tone */
+  --marigold-wash: #FEF3DE;   /* a tint to sit behind text, never the text */
   --indigo: #1E2A5A;          /* all text, all headings */
   --indigo-soft: #46527F;     /* secondary text, still 7.2:1 on cream */
   --cream: #FFF8EC;           /* the ground */
@@ -127,6 +128,7 @@
   :root {
     --marigold: #F2A007;
     --marigold-deep: #FFB52E;
+    --marigold-wash: #33280F;
     --indigo: #FFF8EC;          /* the ink and the ground swap roles */
     --indigo-soft: #C3C9DE;
     --cream: #141A33;
