@@ -23,16 +23,30 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["strings.js", "strings-guidance.js", "safety.js", "matching.js", "content/overlay.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "strings.js",
+        "strings-guidance.js",
+        "safety.js",
+        "matching.js",
+        "content/overlay.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content/overlay.css"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "content/overlay.css",
+        "tokens.css",
+        "fonts/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

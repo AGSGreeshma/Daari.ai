@@ -292,9 +292,17 @@
      with a strict Content-Security-Policy can refuse an extension stylesheet
      link, while a constructable stylesheet is not subject to page CSP. */
   function loadStyles() {
-    var url = chrome.runtime.getURL('content/overlay.css');
-    fetch(url).then(function (response) {
-      return response.text();
+    /* Two files, concatenated: the shared tokens and then the overlay's own
+       rules. A constructable stylesheet cannot @import, so the tokens have to
+       be prepended rather than referenced -- and they must come first, because
+       everything below is written in terms of them. */
+    var sheets = ['tokens.css', 'content/overlay.css'].map(function (name) {
+      return fetch(chrome.runtime.getURL(name)).then(function (response) {
+        return response.text();
+      });
+    });
+    Promise.all(sheets).then(function (parts) {
+      return parts.join('\n');
     }).then(function (css) {
       try {
         var sheet = new CSSStyleSheet();

@@ -1,0 +1,160 @@
+/* Daari's visual system -- one file, shared by the side panel, the onboarding
+   cover and the in-page overlay.
+
+   "Daari" means path. Warm, calm, unmistakably Indian, and built for somebody
+   over 60 who has never used an extension before. Nothing here is subtle:
+   every size is larger than a designer would choose, because the person using
+   it is reading in their second script at arm's length.
+
+   EVERY COLOUR PAIRING IN HERE WAS MEASURED, not eyeballed. Two of the obvious
+   ones fail WCAG AA and are deliberately absent:
+
+     white on marigold  2.14  FAILS   -> the big action button carries INDIGO
+     white on amber     2.62  FAILS   -> the stop card carries INDIGO
+     marigold on cream  2.03  FAILS   -> marigold is a FILL, never text
+     amber on cream     2.48  FAILS   -> ditto
+
+   So the marigold mic button has dark text on it, which also happens to look
+   more like a physical button and less like a web link. The text-safe darker
+   variants below (--ink-warn, --ink-good) exist for the cases where those
+   colours must carry words.
+
+   Ratios, measured against the ground each is used on:
+     indigo  on cream   12.97      cream on dark    16.23
+     indigo  on marigold 6.39      marigold on dark  8.00
+     indigo  on amber    5.22      green  on dark    9.41
+     ink-good on cream   5.00      red    on dark    7.48
+     ink-warn on cream   4.78
+     red     on cream    5.15 */
+
+/* ---------------------------------------------------------------- fonts
+
+   BUNDLED, never fetched. A remote font would mean Daari phones a third party
+   on every page it runs on, and would simply not arrive on a slow connection
+   -- which is the connection our user has.
+
+   THE TWO woff2 FILES ARE NOT IN THE REPO YET. See extension/fonts/README.md.
+   Until they are dropped in, the src below falls through to the Noto fonts
+   that Windows and Chrome already carry for Telugu and Devanagari, and the
+   design is correct and legible. Adding the files makes the typography exact
+   and changes no code. */
+
+@font-face {
+  font-family: 'Daari Telugu';
+  src: url('fonts/BalooTammudu2-Regular.woff2') format('woff2'),
+       local('Noto Sans Telugu'), local('Gautami');
+  font-weight: 400;
+  font-display: swap;
+  /* Telugu block plus the Latin a site will mix into it. */
+  unicode-range: U+0C00-0C7F, U+0020-007F;
+}
+@font-face {
+  font-family: 'Daari Telugu';
+  src: url('fonts/BalooTammudu2-SemiBold.woff2') format('woff2'),
+       local('Noto Sans Telugu'), local('Gautami');
+  font-weight: 600;
+  font-display: swap;
+  unicode-range: U+0C00-0C7F, U+0020-007F;
+}
+@font-face {
+  font-family: 'Daari Sans';
+  src: url('fonts/Baloo2-Regular.woff2') format('woff2'),
+       local('Noto Sans Devanagari'), local('Nirmala UI');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Daari Sans';
+  src: url('fonts/Baloo2-SemiBold.woff2') format('woff2'),
+       local('Noto Sans Devanagari'), local('Nirmala UI');
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  /* ---- the palette ---- */
+  --marigold: #F2A007;        /* the one primary action on screen */
+  --marigold-deep: #D98A05;   /* its pressed/edge tone */
+  --indigo: #1E2A5A;          /* all text, all headings */
+  --indigo-soft: #46527F;     /* secondary text, still 7.2:1 on cream */
+  --cream: #FFF8EC;           /* the ground */
+  --card: #FFFFFF;
+  --line: #E6DCC8;
+  --amber: #E8890C;           /* the stop before paying -- a fill only */
+  --amber-wash: #FDF0DA;
+  --green: #2E8B57;           /* done -- a fill only */
+  --green-wash: #E6F3EB;
+  --red: #C0392B;             /* errors; safe as text on cream at 5.15 */
+  --red-wash: #FBEBE9;
+
+  /* Text-safe variants of the fills, for when they must carry words. */
+  --ink-good: #277A4C;        /* 5.00 on cream */
+  --ink-warn: #A35E00;        /* 4.78 on cream */
+
+  /* ---- type ----
+     The Telugu face leads, because Daari is for Telugu speakers first; the
+     Latin/Devanagari face follows for everything else. system-ui last so the
+     panel never falls back to a serif nobody can read at speed. */
+  --font: 'Daari Telugu', 'Daari Sans', 'Noto Sans Telugu',
+          'Noto Sans Devanagari', 'Nirmala UI', system-ui, sans-serif;
+
+  --text-body: 18px;          /* the floor, per the brief */
+  --text-small: 15px;         /* hints and labels only -- never an instruction */
+  --text-label: 13px;
+  --text-step: 27px;          /* the current instruction */
+  --text-why: 19px;           /* the reason under it, in full mode */
+  --text-huge: 38px;          /* the station spelling, the one thing copied */
+
+  /* ---- space and shape ---- */
+  --tap: 56px;                /* the minimum height of anything tappable */
+  --gap: 14px;
+  --pad: 16px;
+  --radius: 16px;
+  --radius-small: 11px;
+  --shadow: 0 2px 10px rgba(30, 42, 90, 0.09);
+  --shadow-lift: 0 4px 18px rgba(30, 42, 90, 0.16);
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --fade: 260ms;
+}
+
+/* ---------------------------------------------------------- dark mode
+
+   Not an inversion: the cream becomes a deep indigo ground and the ink becomes
+   the cream, so the warmth survives. Every pairing re-measured above. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --marigold: #F2A007;
+    --marigold-deep: #FFB52E;
+    --indigo: #FFF8EC;          /* the ink and the ground swap roles */
+    --indigo-soft: #C3C9DE;
+    --cream: #141A33;
+    --card: #1C2340;
+    --line: #2E3759;
+    --amber: #E8890C;
+    --amber-wash: #3A2A12;
+    --green: #7FD1A0;
+    --green-wash: #16301F;
+    --red: #FF8A7A;
+    --red-wash: #35171A;
+    --ink-good: #7FD1A0;
+    --ink-warn: #F2A007;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --shadow-lift: 0 4px 18px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* --------------------------------------------------- reduced motion
+
+   Some people get motion sick, and a pulsing ring is exactly the kind of thing
+   that does it. Honour the system setting everywhere, including the overlay. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --fade: 1ms; }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
