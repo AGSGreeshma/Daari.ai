@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Daari — UI preview</title>
+
+<!-- The REAL stylesheets, in the order the panel loads them. Nothing here is a
+     copy of the design: if this page looks right, the panel looks right, and if
+     somebody changes a colour in tokens.css it changes here too.
+
+     This file is for looking at and for taking screenshots for the deck. It
+     loads no script, talks to no extension API, and nothing in the extension
+     loads it, so it cannot affect how Daari behaves. -->
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="sidepanel.css">
+<link rel="stylesheet" href="content/overlay.css">
+
+<style>
+  /* Preview chrome only -- none of this ships. */
+  body { padding: 0; }
+  .pv-head {
+    padding: 20px 22px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pv-head h2 { margin: 0; font-size: 21px; }
+  .pv-head p { margin: 6px 0 0; font-size: 15px; color: var(--indigo-soft); }
+  .pv-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    align-items: flex-start;
+    padding: 22px;
+  }
+  /* Each panel state is shown at the real width of a Chrome side panel, so the
+     line breaks here are the line breaks a user sees. */
+  .pv-panel {
+    width: 380px;
+    padding: 16px 16px 24px;
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .pv-cap {
+    width: 100%;
+    margin: 0 0 9px;
+    font-size: var(--text-label);
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--indigo-soft);
+  }
+  .pv-wide { width: 100%; }
+  /* The overlay caption is normally fixed to the bottom of a page; pinned here
+     so it can be seen in a row with everything else. */
+  .pv-stage {
+    position: relative;
+    width: 380px;
+    min-height: 190px;
+    padding: 14px;
+    background: var(--card);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .pv-stage .caption {
+    display: block;
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    max-width: 100%;
+  }
+  .pv-stage .ring {
+    display: block;
+    position: static;
+    width: 180px;
+    height: 46px;
+    margin: 34px 0 14px;
+  }
+  .pv-fake-box {
+    width: 180px;
+    height: 46px;
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .pv-note {
+    margin: 0 0 18px;
+    padding: 12px 15px;
+    font-size: 15px;
+    background: var(--marigold-wash);
+    border-left: 4px solid var(--marigold);
+    border-radius: var(--radius-small);
+  }
+</style>
+</head>
+<body>
+
+<div class="pv-head">
+  <h2>Daari — every state, with fake data</h2>
+  <p>The real tokens.css, sidepanel.css and overlay.css. No script, no extension
+     API. Switch your OS to dark mode and reload to check the dark variants.</p>
+</div>
+
+<div class="pv-grid">
+
+  <p class="pv-cap pv-wide">1 — onboarding, screen one: which language</p>
+  <div class="pv-panel">
+    <svg class="mark" viewBox="0 0 72 44" aria-hidden="true">
+      <!-- the logo mark: a winding path that ends in a dot -->
+      <path d="M4 38 C 18 38, 14 22, 28 22 C 42 22, 38 7, 54 7"
+            fill="none" stroke="#F2A007" stroke-width="5"
+            stroke-linecap="round"/>
+      <circle cx="60" cy="7" r="7" fill="#1E2A5A"/>
+    </svg>
+    <h1>దారి · दारी · Daari</h1>
+    <p class="tagline">I show you the path. You walk it.</p>
+    <p class="onboard-q">భాష  ·  भाषा  ·  Language</p>
+    <div class="langs">
+      <button class="lang" lang="te">తెలుగు</button>
+      <button class="lang" lang="hi">हिन्दी</button>
+      <button class="lang" lang="en">English</button>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">2 — onboarding, screen two: how much help (Telugu chosen)</p>
+  <div class="pv-panel">
+    <svg class="mark" viewBox="0 0 72 44" aria-hidden="true">
+      <path d="M4 38 C 18 38, 14 22, 28 22 C 42 22, 38 7, 54 7"
+            fill="none" stroke="#F2A007" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="60" cy="7" r="7" fill="#1E2A5A"/>
+    </svg>
+    <div class="langs">
+      <button class="lang on" lang="te">తెలుగు</button>
+      <button class="lang" lang="hi">हिन्दी</button>
+      <button class="lang" lang="en">English</button>
+    </div>
+    <p class="onboard-q" lang="te">మీకు ఎంత సహాయం కావాలి?</p>
+    <button class="help-level" id="helpLight" lang="te">
+      <span class="hl-label">చోటు చూపించండి చాలు</span>
+      <span class="hl-hint">మీకు ఇంగ్లీష్ వస్తుంది. చిన్న స్టెప్‌లు చాలు.</span>
+    </button>
+    <button class="help-level on" id="helpFull" lang="te">
+      <span class="hl-label">పూర్తిగా సహాయం చేయండి</span>
+      <span class="hl-hint">దారి ప్రతి పేజీ, ఎందుకో చెబుతుంది.</span>
+    </button>
+    <p class="onboard-note" lang="te">ఇది తరువాత మార్చుకోవచ్చు.</p>
+  </div>
+
+  <p class="pv-cap pv-wide">3 — idle: nothing running yet</p>
+  <div class="pv-panel">
+    <h1>Daari</h1>
+    <p class="tagline">I show you the path. You walk it.</p>
+    <button class="change-setup" lang="te">భాష లేదా సహాయం మార్చండి  ·  పూర్తిగా సహాయం చేయండి</button>
+    <p class="label">Language</p>
+    <div class="langs">
+      <button class="lang on" lang="te">తెలుగు</button>
+      <button class="lang" lang="hi">हिन्दी</button>
+      <button class="lang" lang="en">English</button>
+    </div>
+    <button class="mic" lang="te">మీ పని చెప్పండి</button>
+    <p class="mic-hint" lang="te">మాట్లాడిన తర్వాత బటన్ నొక్కండి</p>
+    <div class="transcript"><span class="placeholder" lang="te">మీరు ఏం చేయాలనుకుంటున్నారు? పై బటన్ నొక్కి చెప్పండి.</span></div>
+    <button class="start">Start demo on this page</button>
+  </div>
+
+  <p class="pv-cap pv-wide">4 — listening, with a live transcript</p>
+  <div class="pv-panel">
+    <button class="mic sending" lang="te">పంపడానికి నొక్కండి</button>
+    <p class="mic-hint" lang="te">వింటున్నాను…</p>
+    <button class="mic-cancel" style="display:block" lang="te">రద్దు చేయండి</button>
+    <div class="transcript" lang="te">విజయవాడ నుండి కాజీపేటకు టికెట్ కావాలి</div>
+  </div>
+
+  <p class="pv-cap pv-wide">5 — the current step, full mode, Telugu</p>
+  <div class="pv-panel">
+    <p class="label">Guidance <span class="counter">అడుగు 3 / 15</span></p>
+    <div class="instruction" lang="te" style="display:block">
+      <span class="which">అడుగు 3 / 15</span>
+      <span>ఇక్కడ క్లాస్ సెలెక్ట్ చేసుకోండి. స్లీపర్ అన్నిటికంటే చౌక, బెర్త్ ఉంటుంది కానీ AC ఉండదు. బెర్త్ అంటే ట్రైన్‌లో మీరు పడుకునే బెడ్.</span>
+    </div>
+    <button class="done-next" style="display:inline-block" lang="te">అయింది - తర్వాత</button>
+    <button class="back-step" style="display:inline-block" lang="te">వెనక్కి వెళ్లండి</button>
+    <div class="controls">
+      <button lang="te">🔁 మళ్లీ చెప్పండి</button>
+      <button lang="te">⏸ ఆపండి</button>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">6 — the same step in Hindi and English, to check both scripts</p>
+  <div class="pv-panel">
+    <div class="instruction" lang="hi" style="display:block">
+      <span class="which">चरण 3 / 15</span>
+      <span>यहाँ क्लास चुनिए। स्लीपर सबसे सस्ता है, बर्थ है पर AC नहीं। 3AC और 2AC में AC है और पैसे ज़्यादा लगते हैं।</span>
+    </div>
+    <div class="instruction" style="display:block">
+      <span class="which">Step 3 of 15</span>
+      <span>Choose your class here. Sleeper is the cheapest, with a berth but no AC. 3AC and 2AC have AC and cost more.</span>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">7 — the station helper, resolved</p>
+  <div class="pv-panel">
+    <div class="instruction" lang="te" style="display:block">
+      <span class="which">అడుగు 1 / 15</span>
+      <span>మీ ప్రయాణం ఏ స్టేషన్ నుండి మొదలవుతుందో ఇక్కడ టైప్ చేయండి.</span>
+    </div>
+    <div class="station">
+      <p class="station-prompt" lang="te">మీ స్టేషన్ చెప్పండి లేదా టైప్ చేయండి</p>
+      <div class="station-ask">
+        <input type="text" value="విజయవాడ" lang="te" aria-label="station">
+        <button lang="te">వెతకండి</button>
+      </div>
+      <div class="station-answer">
+        <p class="station-label" lang="te">ఇది టైప్ చేయండి:</p>
+        <p class="station-name" lang="en">VIJAYAWADA</p>
+        <p class="station-code" lang="te">చిన్న కోడ్ కూడా పనిచేస్తుంది: BZA</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">8 — the station helper, name not known</p>
+  <div class="pv-panel">
+    <div class="station">
+      <p class="station-prompt" lang="te">మీ స్టేషన్ చెప్పండి లేదా టైప్ చేయండి</p>
+      <div class="station-ask">
+        <input type="text" value="Narnia" aria-label="station">
+        <button lang="te">వెతకండి</button>
+      </div>
+      <p class="station-unknown" lang="te">ఆ స్టేషన్ నాకు తెలియదు. మీరే టైప్ చేయండి.</p>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">9 — THE STOP before paying</p>
+  <div class="pv-panel">
+    <p class="label">Guidance <span class="counter">అడుగు 14 / 15</span></p>
+    <div class="instruction" lang="te" style="display:block">
+      <span class="which">అడుగు 14 / 15</span>
+      <span>చెల్లించే ముందు స్క్రీన్ మీద ఉన్న వివరాలు చూడండి</span>
+    </div>
+    <button class="confirm" style="display:block" lang="te">నేను చూశాను - కొనసాగించండి</button>
+  </div>
+
+  <p class="pv-cap pv-wide">10 — finished</p>
+  <div class="pv-panel">
+    <div class="instruction" lang="te" style="display:block; border-left-color: var(--green); background: var(--green-wash)">
+      <span class="which" style="color: var(--ink-good)">✅ పూర్తయింది</span>
+      <span>టికెట్ బుక్ అయింది. మీ PNR స్క్రీన్ మీద ఉంది - ఆ నంబర్ దగ్గర పెట్టుకోండి.</span>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">11 — "I am not sure", and an error</p>
+  <div class="pv-panel">
+    <div class="instruction" lang="te" style="display:block; border-left-color: var(--indigo-soft)">
+      <span class="which">అడుగు 2</span>
+      <span>ఈ పేజీ గురించి నాకు ఖచ్చితంగా తెలియదు. స్క్రీన్ మీద ఏం కనిపిస్తుందో చెప్పగలరా?</span>
+    </div>
+    <div class="msg bad" style="display:block">That page is not listening. Reload it (F5) and try again.</div>
+    <div class="msg info" style="display:block">I have no saved route for this site, so I will read the page myself.
+      I will tell you if I am unsure rather than guessing.</div>
+  </div>
+
+  <p class="pv-cap pv-wide">12 — the in-page overlay: ring and caption, four states</p>
+
+  <div class="pv-stage">
+    <div class="pv-fake-box"></div>
+    <div class="ring"></div>
+    <div class="caption" lang="te">
+      <div class="step">అడుగు 1 / 15</div>
+      <div class="say">మీ ప్రయాణం ఏ స్టేషన్ నుండి మొదలవుతుందో ఇక్కడ టైప్ చేయండి.</div>
+    </div>
+  </div>
+
+  <div class="pv-stage">
+    <div class="caption gate" lang="te">
+      <div class="step">ముందు చూడండి</div>
+      <div class="say">చెల్లించే ముందు స్క్రీన్ మీద ఉన్న వివరాలు చూడండి</div>
+    </div>
+    <div class="caption done" lang="te" style="margin-top:14px">
+      <div class="step">పూర్తయింది</div>
+      <div class="say">✅ మీ PNR స్క్రీన్ మీద ఉంది. బాగా చేశారు!</div>
+    </div>
+  </div>
+
+  <div class="pv-stage">
+    <div class="caption lost" lang="te">
+      <div class="step">అడుగు 2</div>
+      <div class="say">ఈ పేజీ గురించి నాకు ఖచ్చితంగా తెలియదు. స్క్రీన్ మీద ఏం కనిపిస్తుందో చెప్పగలరా?</div>
+    </div>
+    <div class="caption hint" lang="te" style="margin-top:14px">
+      <div class="step">అడుగు 1 / 15</div>
+      <div class="say">VIJAYAWADA అని ఉన్న దాన్ని సెలెక్ట్ చేయండి</div>
+    </div>
+  </div>
+
+  <div class="pv-stage">
+    <div class="caption" style="margin-bottom:14px">
+      <div class="step">Step 4 of 15</div>
+      <div class="say">Press Book next to the train you want.</div>
+    </div>
+    <div class="caption" lang="hi">
+      <div class="step">चरण 4 / 15</div>
+      <div class="say">जो ट्रेन चाहिए उसके आगे Book दबाइए।</div>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">13 — the developer strip, which only we read</p>
+  <div class="pv-panel">
+    <details class="dev" open>
+      <summary>Developer details</summary>
+      <div id="devBody">
+        Step 3 · <span class="path-ai">ai</span> · confidence 0.91<br>
+        Step 2 · <span class="path-fallback">fallback</span> · model rejected the recipe hint<br>
+        Step 1 · <span class="path-recipe">recipe</span><br>
+        Step 4 · <span class="path-gate">gate</span> · waiting for the user<br>
+        Step 5 · <span class="path-none">none</span> · not sure about this page<br>
+        AI calls: 6 / 25
+      </div>
+    </details>
+  </div>
+
+</div>
+</body>
+</html>
