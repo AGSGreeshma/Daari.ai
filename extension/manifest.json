@@ -24,7 +24,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["strings.js", "safety.js", "matching.js", "content/overlay.js"],
+      "js": ["strings.js", "strings-guidance.js", "safety.js", "matching.js", "content/overlay.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

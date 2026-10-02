@@ -789,6 +789,7 @@
        step, and the old timer then fired and advanced the flow again -- onto the
        final step, which announced "Finished" on the payment page. */
     clearAdvanceTimers();
+    clearSuggestionWatch();
     if (stopWatching) { stopWatching(); stopWatching = null; }
     if (retryObserver) { retryObserver.disconnect(); retryObserver = null; }
 
@@ -896,6 +897,96 @@
 
   function ruleKindOf(rule) {
     return String(rule || '').split(':')[0];
+  }
+
+  /* ---- ringing the right suggestion -------------------------------------
+
+     The station helper in the panel has worked out that the user means
+     VIJAYAWADA. They start typing it, and the site opens a list. On a long
+     list, "pick the right one" is another small cliff: the names look alike,
+     and picking the wrong one books the wrong journey.
+
+     So when the list opens, Daari moves its ring onto the option that matches
+     and says which one it is. It does not click it. The user does.
+
+     The option is found by its own visible text, which is the page author's
+     words -- nothing the user typed is read. */
+  var suggestionStop = null;
+
+  function clearSuggestionWatch() {
+    if (suggestionStop) { suggestionStop(); suggestionStop = null; }
+  }
+
+  /* The visible option whose text contains this station name. */
+  function findSuggestion(name) {
+    var want = String(name || '').trim().toUpperCase();
+    if (!want) { return null; }
+
+    var options = document.querySelectorAll('[role="option"]');
+    for (var i = 0; i < options.length; i++) {
+      var option = options[i];
+      var box = option.getBoundingClientRect();
+      if (box.width <= 1 || box.height <= 1) { continue; }     /* not on screen */
+      var text = (option.innerText || option.textContent || '').toUpperCase();
+      if (text.indexOf(want) !== -1) { return option; }
+    }
+    return null;
+  }
+
+  function watchForSuggestion(name, lang) {
+    clearSuggestionWatch();
+    if (!name) { return; }
+
+    var said = false;
+    var observer = null;
+    var timer = null;
+
+    function look() {
+      var option = findSuggestion(name);
+
+      if (!option) {
+        /* The list closed again, or has not opened yet. Put the ring back on
+           the box the step is about, so the user is never left with a ring
+           pointing at something that is gone. */
+        if (said) {
+          said = false;
+          if (currentStepPayload) { highlight(currentStepPayload.index); }
+        }
+        return;
+      }
+      if (said) { return; }
+
+      said = true;
+      ensureOverlay();
+      currentEl = option;
+      if (rafId === null) { syncRing(); }
+
+      /* The name is spoken in Latin letters inside a sentence in the user's
+         own language -- it is what the screen says, and the whole point is to
+         match it by eye. */
+      announce(DAARI_T(DAARI_GUIDANCE.station.pickThisOne, lang, { name: name }),
+        '', 'hint', lang);
+    }
+
+    /* The list is built and destroyed as the user types, so watch the whole
+       document rather than one node. Cheap: it only runs while a station step
+       is live. */
+    if (window.MutationObserver) {
+      observer = new window.MutationObserver(function () {
+        if (timer !== null) { return; }
+        timer = window.setTimeout(function () { timer = null; look(); }, 120);
+      });
+      observer.observe(document.documentElement, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['hidden', 'style', 'class', 'aria-expanded']
+      });
+    }
+    look();
+
+    suggestionStop = function () {
+      if (observer) { observer.disconnect(); }
+      if (timer !== null) { window.clearTimeout(timer); }
+    };
   }
 
   /* Notice a submit the website refused.
@@ -1009,6 +1100,17 @@
     if (message.type === 'DAARI_MANUAL_DONE') {
       var lang = (currentStepPayload && currentStepPayload.lang) || 'te';
       advance(lang, 0);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    /* The station helper in the panel has resolved what the user said. Watch
+       for the site's own suggestion list and ring the matching one when it
+       opens. Daari still never picks it. */
+    if (message.type === 'DAARI_RING_SUGGESTION') {
+      var pickLang = (currentStepPayload && currentStepPayload.lang) ||
+                     message.lang || 'te';
+      watchForSuggestion(message.name, pickLang);
       sendResponse({ ok: true });
       return;
     }
@@ -1127,6 +1229,10 @@
       /* For tests: the pacing rules are behavioural and cannot be checked any
          other way without a browser. */
       watchForDone: expose('watchForDone', watchForDone),
+      /* Also for tests: which suggestion Daari would ring. Finding the right
+         option in a list of similar station names is the step after the ring,
+         and getting it wrong books the wrong journey. */
+      findSuggestion: expose('findSuggestion', findSuggestion),
       serializeOne: expose('serializeOne', function (i) { return lastList[i] || null; }),
       version: '0.7'
     };

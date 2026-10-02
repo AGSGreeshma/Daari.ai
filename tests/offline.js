@@ -1747,8 +1747,18 @@ console.log('\n2n. The station helper: what they said, spelled how the site want
     /* Typed in Telugu. */
     panel.el.stationInput.value = 'విజయవాడ';
     panel.el.stationFind._fire('click');
+    await new Promise((r) => setImmediate(r));
     check('it shows the spelling the site wants', panel.el.stationName.textContent,
       'VIJAYAWADA');
+
+    /* The page is told WHICH NAME to ring, and nothing else. */
+    const ring = panel.toTab.map((t) => t.message)
+      .filter((m) => m.type === 'DAARI_RING_SUGGESTION')[0];
+    check('  and the page is asked to ring that suggestion', !!ring, true);
+    check('  carrying the name, the language, and nothing else',
+      Object.keys(ring || {}).sort().join(','), 'lang,name,type');
+    check('  the name being the site spelling, not what was typed',
+      ring && ring.name, 'VIJAYAWADA');
     check('  in Latin letters, not translated',
       panel.el.stationName.getAttribute('lang'), 'en');
     check('  with the short code as well',
@@ -1770,9 +1780,21 @@ console.log('\n2n. The station helper: what they said, spelled how the site want
     check('  and clears the answer with it', panel.el.stationAnswer.hidden, true);
     check('  and empties the box', panel.el.stationInput.value, '');
 
-    /* RULE 1: it tells, it does not do. */
-    check('nothing was sent to the page',
-      panel.toTab.filter((t) => /type|fill|value/i.test(JSON.stringify(t.message))).length, 0);
+    /* RULE 1: it tells, it does not do.
+
+       Checked as an allow-list of message types rather than by searching the
+       JSON for the word "type" -- which matched the "type" KEY of every
+       message and so could never have failed. */
+    const ALLOWED = ['DAARI_RING_SUGGESTION', 'DAARI_ASK_AGAIN', 'DAARI_MANUAL_DONE',
+                     'DAARI_MANUAL_BACK', 'DAARI_STOP'];
+    const strays = panel.toTab.map((t) => t.message.type)
+      .filter((kind) => ALLOWED.indexOf(kind) === -1);
+    check('no message of any other kind reached the page', strays.join(','), '');
+
+    /* And none of them carries text for the page to enter anywhere. */
+    const carriers = panel.toTab.map((t) => t.message)
+      .filter((m) => 'value' in m || 'text' in m || 'fill' in m);
+    check('and none of them carries something to type in', carriers.length, 0);
   }
 
   // ---- the station list itself is well formed -------------------------
@@ -2177,6 +2199,546 @@ console.log('\n2p. FULL mode: what the choices mean, and how to read a list');
   delete storage.local.helpLevel;
   aiFail = null;
   aiReply = null;
+}
+console.log('\n2q. Station suggestions on the practice site, and ringing the right one');
+{
+  /* Real booking sites do not accept a typed station name. They want one
+     CHOSEN from a list, and ignore anything else -- which is one of the places
+     a first-time user gets quietly stuck. The demo site now behaves the same
+     way, so the demo shows the real problem.
+
+     Then: Daari rings the matching suggestion and says which one it is. It
+     still never picks it. */
+
+  // ---- a fake DOM, just enough to build and drive a combobox ----------
+  function makeNode(tag) {
+    const node = {
+      tagName: String(tag).toUpperCase(),
+      id: '',
+      className: '',
+      value: '',
+      hidden: false,
+      textContent: '',
+      children: [],
+      parentNode: null,
+      style: {},
+      _attrs: {},
+      _listeners: {},
+      _visible: true,
+      setAttribute: (k, v) => { node._attrs[k] = String(v); },
+      getAttribute: (k) => (k in node._attrs ? node._attrs[k] : null),
+      hasAttribute: (k) => k in node._attrs,
+      removeAttribute: (k) => { delete node._attrs[k]; },
+      addEventListener: (name, fn) => {
+        (node._listeners[name] = node._listeners[name] || []).push(fn);
+      },
+      appendChild: (child) => {
+        child.parentNode = node; node.children.push(child); return child;
+      },
+      insertBefore: (fresh, before) => {
+        const at = node.children.indexOf(before);
+        fresh.parentNode = node;
+        node.children.splice(at === -1 ? node.children.length : at, 0, fresh);
+        return fresh;
+      },
+      removeChild: (child) => {
+        node.children = node.children.filter((c) => c !== child); return child;
+      },
+      focus: () => {},
+      getBoundingClientRect: () => (node._visible
+        ? { width: 180, height: 22, top: 40, left: 20 }
+        : { width: 0, height: 0, top: 0, left: 0 }),
+      fire: (name, event) => {
+        (node._listeners[name] || []).slice().forEach((fn) => fn(event || {
+          preventDefault: () => {}
+        }));
+      },
+      type_: function (text) { this.value = text; this.fire('input'); }
+    };
+    /* textContent = '' is how the widget empties the list. */
+    Object.defineProperty(node, 'textContent', {
+      get: () => node._text || '',
+      set: (v) => { node._text = v; if (v === '') { node.children = []; } }
+    });
+    return node;
+  }
+
+  /* Load the practice site's app.js with that fake DOM. */
+  function loadSite() {
+    const created = [];
+    const document = {
+      createElement: (tag) => { const n = makeNode(tag); created.push(n); return n; },
+      getElementById: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {}
+    };
+    const sandbox = {
+      document: document,
+      window: { setTimeout: (fn) => { sandbox.__blurTimer = fn; return 1; },
+                clearTimeout: () => {} },
+      console: { log: () => {}, warn: () => {} },
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      Date, Math, String, Number, Object, Array, JSON, RegExp, Boolean, Error
+    };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'practice', 'app.js'), 'utf8'),
+      sandbox, { filename: 'practice/app.js' });
+    return { YDR: sandbox.YDR, document: document, sandbox: sandbox };
+  }
+
+  // ---- the two station lists must agree ------------------------------
+  {
+    const site = loadSite().YDR.STATIONS.map((s) => s.name);
+    const daari = ctx.self.DAARI_STATIONS.map((s) => s.en);
+
+    /* If Daari can resolve a name the site does not offer, it would print
+       "Type: KHAMMAM" in letters half an inch high and then the site would
+       have no such suggestion to pick. */
+    check('every station Daari can resolve is offered by the site',
+      daari.filter((n) => site.indexOf(n) === -1).join(','), '');
+    check('and every station the site offers, Daari can resolve',
+      site.filter((n) => daari.indexOf(n) === -1).join(','), '');
+  }
+
+  // ---- what the site suggests as you type ----------------------------
+  {
+    const { YDR } = loadSite();
+    const names = (typed) => YDR.matchStations(typed).map((s) => s.name);
+
+    check('typing vij suggests Vijayawada', names('vij').join(','), 'VIJAYAWADA');
+    check('a station code suggests it too', names('BZA').join(','), 'VIJAYAWADA');
+    check('typing is not case sensitive', names('SeCuN').join(','), 'SECUNDERABAD');
+    check('nothing typed suggests nothing', names('').length, 0);
+    check('rubbish suggests nothing', names('qqqq').length, 0);
+    check('a name that starts with it comes before one that contains it',
+      names('NEW')[0], 'NEW DELHI');
+    check('the list is capped, so it never fills the screen',
+      YDR.matchStations('a').length <= 8, true);
+  }
+
+  // ---- the widget builds the pattern a screen reader expects ----------
+  {
+    const { YDR } = loadSite();
+    const input = makeNode('input');
+    input.id = 'from';
+    const row = makeNode('div');
+    row.appendChild(input);
+
+    YDR.attachAutocomplete(input);
+
+    check('the box becomes a combobox', input.getAttribute('role'), 'combobox');
+    check('  which says it suggests a list',
+      input.getAttribute('aria-autocomplete'), 'list');
+    check('  and starts collapsed', input.getAttribute('aria-expanded'), 'false');
+    check('  pointing at its list by id',
+      input.getAttribute('aria-controls'), 'from-suggestions');
+
+    /* The list is wrapped around the box, not dropped into the row, so it
+       lines up under the box rather than under the label beside it. */
+    const wrap = input.parentNode;
+    check('the box is wrapped for positioning', wrap.className, 'ac-wrap');
+    const list = wrap.children.filter((c) => c.id === 'from-suggestions')[0];
+    check('the list is a listbox', list.getAttribute('role'), 'listbox');
+    check('  and starts hidden', list.hidden, true);
+
+    // ---- typing opens it ----
+    input.type_('vij');
+    check('typing opens the list', list.hidden, false);
+    check('  and says so', input.getAttribute('aria-expanded'), 'true');
+    check('  with one option', list.children.length, 1);
+    check('  which is an option', list.children[0].getAttribute('role'), 'option');
+    check('  showing the name and the code',
+      /VIJAYAWADA/.test(list.children[0].textContent) &&
+      /BZA/.test(list.children[0].textContent), true);
+    check('  and nothing selected yet',
+      input.getAttribute('aria-activedescendant'), null);
+
+    // ---- keyboard ----
+    input.fire('keydown', { key: 'ArrowDown', preventDefault: () => {} });
+    check('arrow down picks out the first option',
+      input.getAttribute('aria-activedescendant'), 'from-suggestions-0');
+    check('  and marks it selected',
+      list.children[0].getAttribute('aria-selected'), 'true');
+
+    input.fire('keydown', { key: 'Enter', preventDefault: () => {} });
+    check('Enter puts the station in the box', input.value, 'VIJAYAWADA');
+    check('  and closes the list', list.hidden, true);
+    check('  and says it is closed', input.getAttribute('aria-expanded'), 'false');
+    check('  and nothing is selected any more',
+      input.getAttribute('aria-activedescendant'), null);
+  }
+
+  // ---- Enter with nothing picked still submits the form ---------------
+  {
+    const { YDR } = loadSite();
+    const input = makeNode('input');
+    input.id = 'to';
+    makeNode('div').appendChild(input);
+    YDR.attachAutocomplete(input);
+
+    input.type_('kazi');
+    let prevented = false;
+    input.fire('keydown', { key: 'Enter', preventDefault: () => { prevented = true; } });
+    check('Enter with no option picked does not swallow the key', prevented, false);
+    check('  and leaves what was typed alone', input.value, 'kazi');
+  }
+
+  // ---- the mouse works too --------------------------------------------
+  {
+    const { YDR } = loadSite();
+    const input = makeNode('input');
+    input.id = 'from';
+    makeNode('div').appendChild(input);
+    YDR.attachAutocomplete(input);
+
+    input.type_('secun');
+    const list = input.parentNode.children.filter((c) => c.id === 'from-suggestions')[0];
+    list.children[0].fire('mousedown', { preventDefault: () => {} });
+    check('clicking a suggestion fills the box', input.value, 'SECUNDERABAD');
+    check('  and closes the list', list.hidden, true);
+  }
+
+  // ---- Escape closes it without choosing ------------------------------
+  {
+    const { YDR } = loadSite();
+    const input = makeNode('input');
+    input.id = 'from';
+    makeNode('div').appendChild(input);
+    YDR.attachAutocomplete(input);
+
+    input.type_('vij');
+    input.fire('keydown', { key: 'Escape', preventDefault: () => {} });
+    const list = input.parentNode.children.filter((c) => c.id === 'from-suggestions')[0];
+    check('Escape closes the list', list.hidden, true);
+    check('  without choosing anything', input.value, 'vij');
+  }
+
+  // ---- a chosen station does not re-open the list ---------------------
+  {
+    const { YDR } = loadSite();
+    const input = makeNode('input');
+    input.id = 'from';
+    makeNode('div').appendChild(input);
+    YDR.attachAutocomplete(input);
+
+    input.type_('VIJAYAWADA');
+    const list = input.parentNode.children.filter((c) => c.id === 'from-suggestions')[0];
+    check('an exact station name needs no list', list.hidden, true);
+  }
+
+  // ---- WHICH suggestion Daari rings -----------------------------------
+  {
+    /* findSuggestion out of the real overlay. It reads the option's own
+       visible text -- the page author's words -- and never what the user
+       typed. */
+    const src = fs.readFileSync(path.join(EXT, 'content', 'overlay.js'), 'utf8');
+    const from = src.indexOf('function findSuggestion(');
+    const to = src.indexOf('function watchForSuggestion(');
+    check('findSuggestion is where the test expects it', from > 0 && to > from, true);
+
+    function runFind(optionTexts, want, invisible) {
+      const options = optionTexts.map((text, i) => ({
+        innerText: text,
+        textContent: text,
+        getBoundingClientRect: () => ((invisible || []).indexOf(i) !== -1
+          ? { width: 0, height: 0 } : { width: 200, height: 20 })
+      }));
+      const sandbox = {
+        document: { querySelectorAll: () => options },
+        String: String, Object: Object
+      };
+      sandbox.self = sandbox;
+      vm.createContext(sandbox);
+      vm.runInContext(src.slice(from, to) + '\n;this.__find = findSuggestion;', sandbox);
+      const hit = sandbox.__find(want);
+      return hit ? hit.innerText : null;
+    }
+
+    check('it rings the option that names the station',
+      runFind(['KAZIPET  (KZJ)', 'VIJAYAWADA  (BZA)', 'WARANGAL  (WL)'], 'VIJAYAWADA'),
+      'VIJAYAWADA  (BZA)');
+    check('  not a different one that looks similar',
+      runFind(['NEW DELHI  (NDLS)', 'NELLORE  (NLR)'], 'NELLORE'), 'NELLORE  (NLR)');
+    check('a station not in the list rings nothing',
+      runFind(['KAZIPET  (KZJ)'], 'VIJAYAWADA'), null);
+    check('an empty list rings nothing', runFind([], 'VIJAYAWADA'), null);
+    check('no station name rings nothing', runFind(['VIJAYAWADA  (BZA)'], ''), null);
+    check('a suggestion that is not on screen is not rung',
+      runFind(['VIJAYAWADA  (BZA)'], 'VIJAYAWADA', [0]), null);
+  }
+
+  // ---- the sentence it says --------------------------------------------
+  {
+    const S = ctx.self.DAARI_GUIDANCE.station;
+    check('the pick sentence has a slot for the name',
+      S.pickThisOne.en.indexOf('{name}') > 0, true);
+    let missing = [];
+    ['te', 'hi', 'en'].forEach((code) => {
+      if (!S.pickThisOne[code]) { missing.push(code); }
+      else if (S.pickThisOne[code].indexOf('{name}') === -1) { missing.push(code + ' (no slot)'); }
+    });
+    check('  in all three languages', missing.join(','), '');
+    check('  and it reads as a sentence once filled',
+      ctx.self.DAARI_T(S.pickThisOne, 'en', { name: 'VIJAYAWADA' }),
+      'Pick the one that says VIJAYAWADA');
+    check('  including in Telugu',
+      ctx.self.DAARI_T(S.pickThisOne, 'te', { name: 'VIJAYAWADA' }).indexOf('VIJAYAWADA'),
+      0);
+  }
+}
+console.log('\n2r. The pacing and the new suggestion list, together');
+{
+  /* Feature 2 and Feature 3 have to fit. The pacing rule from Phase B waits
+     for the suggestion list to open and close again before calling a station
+     step done -- and that rule was written against a real site's markup, not
+     against the practice site, which until now had no list at all.
+
+     So this runs the REAL watchForDone from overlay.js against the REAL widget
+     from practice/app.js. Not a copy of either: the shipped code, on both
+     sides. If the demo site's markup ever stops looking like an autocomplete
+     to the overlay, the step would complete the moment the first letter was
+     typed and Daari would rush ahead -- which is the exact complaint that
+     caused the pacing work in the first place. */
+
+  // ---- a fake clock ----------------------------------------------------
+  let now = 0;
+  let timers = [];
+  let nextId = 1;
+  const fakeSetTimeout = (fn, ms) => {
+    const id = nextId++;
+    timers.push({ id: id, at: now + (ms || 0), fn: fn });
+    return id;
+  };
+  const fakeClearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
+  function tick(ms) {
+    const until = now + ms;
+    for (;;) {
+      const due = timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at)[0];
+      if (!due) { break; }
+      timers = timers.filter((t) => t !== due);
+      now = due.at;
+      due.fn();
+    }
+    now = until;
+  }
+
+  // ---- a node good enough for both the widget and the watcher ---------
+  function makeNode(tag) {
+    const node = {
+      tagName: String(tag).toUpperCase(),
+      type: 'text',
+      id: '',
+      className: '',
+      value: '',
+      hidden: false,
+      children: [],
+      parentNode: null,
+      style: {},
+      _attrs: {},
+      _listeners: {},
+      setAttribute: (k, v) => { node._attrs[k] = String(v); },
+      getAttribute: (k) => (k in node._attrs ? node._attrs[k] : null),
+      hasAttribute: (k) => k in node._attrs,
+      removeAttribute: (k) => { delete node._attrs[k]; },
+      addEventListener: (name, fn) => {
+        (node._listeners[name] = node._listeners[name] || []).push(fn);
+      },
+      removeEventListener: (name, fn) => {
+        node._listeners[name] = (node._listeners[name] || []).filter((f) => f !== fn);
+      },
+      appendChild: (c) => { c.parentNode = node; node.children.push(c); return c; },
+      insertBefore: (fresh, before) => {
+        const at = node.children.indexOf(before);
+        fresh.parentNode = node;
+        node.children.splice(at === -1 ? node.children.length : at, 0, fresh);
+        return fresh;
+      },
+      focus: () => {},
+      getBoundingClientRect: () => (node.hidden
+        ? { width: 0, height: 0, top: 0, left: 0 }
+        : { width: 180, height: 22, top: 40, left: 20, bottom: 62, right: 200 }),
+      fire: (name, event) => {
+        (node._listeners[name] || []).slice().forEach((fn) => fn(event || {
+          preventDefault: () => {}
+        }));
+      },
+      type_: function (text) { this.value = text; this.fire('input'); }
+    };
+    Object.defineProperty(node, 'textContent', {
+      get: () => node._text || '',
+      set: (v) => { node._text = v; if (v === '') { node.children = []; } }
+    });
+    return node;
+  }
+
+  /* The practice site's widget, attached to a box, with its own fake DOM. */
+  function buildWidget() {
+    const created = [];
+    const document = {
+      createElement: (tag) => { const n = makeNode(tag); created.push(n); return n; },
+      getElementById: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {}
+    };
+    const siteBox = { blurTimer: null };
+    const sandbox = {
+      document: document,
+      window: {
+        setTimeout: (fn) => { siteBox.blurTimer = fn; return 1; },
+        clearTimeout: () => {}
+      },
+      console: { log: () => {}, warn: () => {} },
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      Date, Math, String, Number, Object, Array, JSON, RegExp, Boolean, Error
+    };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'practice', 'app.js'), 'utf8'),
+      sandbox, { filename: 'practice/app.js' });
+
+    const input = makeNode('input');
+    input.id = 'from';
+    makeNode('div').appendChild(input);
+    sandbox.YDR.attachAutocomplete(input);
+    const list = input.parentNode.children.filter((c) => c.id === 'from-suggestions')[0];
+    return { input: input, list: list };
+  }
+
+  /* The real watchForDone, pointed at that same box and that same list. */
+  function watchIt(widget) {
+    const src = fs.readFileSync(path.join(EXT, 'content', 'overlay.js'), 'utf8');
+    const from = src.indexOf('  function watchForDone(');
+    const to = src.indexOf('  /* ====', from);
+    if (from === -1 || to === -1) { throw new Error('could not find watchForDone'); }
+
+    const sandbox = {
+      console: { log: () => {}, warn: () => {} },
+      String: String, Number: Number, Object: Object, Array: Array, RegExp: RegExp,
+      lastList: [{ el: widget.input,
+        data: { i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false } }],
+      isFilled: function (el) { return String(el.value || '').length > 0; },
+      serializePage: function () { return [{ i: 0, name: 'From station *' }]; },
+      DAARI_RESOLVE_BY_NAME: function () { return 0; },
+      visiblePageText: function () { return ''; },
+      window: { setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout },
+      MutationObserver: function (cb) {
+        this.observe = function () { sandbox.__mutate = cb; };
+        this.disconnect = function () { sandbox.__mutate = null; };
+      },
+      document: {
+        documentElement: {},
+        addEventListener: function () {},
+        removeEventListener: function () {},
+        /* The widget's own list, by the id the widget's own box points at. */
+        getElementById: function (id) {
+          return (widget.list && widget.list.id === id) ? widget.list : null;
+        },
+        /* The widget's own options, exactly as the overlay would find them. */
+        querySelector: function () {
+          const open = !widget.list.hidden && widget.list.children.length;
+          return open ? widget.list.children[0] : null;
+        }
+      }
+    };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(src.slice(from, to) + '\n;this.__watchForDone = watchForDone;', sandbox);
+
+    const done = { count: 0, why: null };
+    const hints = [];
+    sandbox.__watchForDone('field_filled', 0,
+      function (why) { done.count += 1; done.why = why; },
+      function (key) { hints.push(key); });
+    return { done: done, hints: hints, mutate: () => { if (sandbox.__mutate) { sandbox.__mutate(); } } };
+  }
+
+  // ---- the overlay recognises the practice site's box -------------------
+  {
+    const widget = buildWidget();
+    const src = fs.readFileSync(path.join(EXT, 'content', 'overlay.js'), 'utf8');
+    const from = src.indexOf('    function looksLikeAutocomplete(');
+    const to = src.indexOf('    /* Is its list open right now? */', from);
+    check('looksLikeAutocomplete is where the test expects it', from > 0 && to > from, true);
+
+    const sandbox = { String: String, document: {} };
+    sandbox.self = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(src.slice(from, to) + '\n;this.__looks = looksLikeAutocomplete;', sandbox);
+
+    check('the practice station box looks like an autocomplete to the overlay',
+      sandbox.__looks(widget.input), true);
+    check('  and a plain box still does not',
+      sandbox.__looks(makeNode('input')), false);
+  }
+
+  // ---- THE REAL THING: typing does not finish the step -----------------
+  {
+    const widget = buildWidget();
+    const watch = watchIt(widget);
+
+    widget.input.type_('vij');                 /* the list opens */
+    check('typing opens the site list', widget.list.hidden, false);
+
+    watch.mutate();
+    tick(5000);
+    check('the step does NOT complete while the list is open', watch.done.count, 0);
+    check('  and the user is told to pick from the list',
+      watch.hints.indexOf('pickFromList') !== -1, true);
+  }
+
+  // ---- choosing one DOES finish it -------------------------------------
+  {
+    const widget = buildWidget();
+    const watch = watchIt(widget);
+
+    widget.input.type_('vij');
+    watch.mutate();
+    tick(1000);
+    check('still waiting', watch.done.count, 0);
+
+    /* Pick it with the keyboard, exactly as a user would. */
+    widget.input.fire('keydown', { key: 'ArrowDown', preventDefault: () => {} });
+    widget.input.fire('keydown', { key: 'Enter', preventDefault: () => {} });
+    check('the box now holds the station', widget.input.value, 'VIJAYAWADA');
+    check('  and the list closed', widget.list.hidden, true);
+
+    watch.mutate();
+    tick(5000);
+    check('choosing a suggestion completes the step', watch.done.count, 1);
+  }
+
+  // ---- and with the mouse ----------------------------------------------
+  {
+    const widget = buildWidget();
+    const watch = watchIt(widget);
+
+    widget.input.type_('secun');
+    watch.mutate();
+    tick(1000);
+    widget.list.children[0].fire('mousedown', { preventDefault: () => {} });
+    check('clicking a suggestion fills the box', widget.input.value, 'SECUNDERABAD');
+
+    watch.mutate();
+    tick(5000);
+    check('and completes the step', watch.done.count, 1);
+  }
+
+  // ---- half a station name, list still open, nothing happens ----------
+  {
+    /* The original complaint, in one test: "it rushes ahead while I am still
+       typing a station name". */
+    const widget = buildWidget();
+    const watch = watchIt(widget);
+
+    ['s', 'se', 'sec', 'secu'].forEach(function (sofar) {
+      widget.input.type_(sofar);
+      watch.mutate();
+      tick(600);
+    });
+    check('four letters in, with the list open, the step has not moved on',
+      watch.done.count, 0);
+  }
 }
 console.log('\n3. The AI path: model agrees with the recipe');
 {

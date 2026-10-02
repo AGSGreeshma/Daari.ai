@@ -123,6 +123,18 @@
     }
   }
 
+  /* Same as tellPage, but says nothing when nobody is listening.
+
+     For messages the user did not ask for and does not need to know failed --
+     ringing a suggestion is a help, not a step. "That page is not listening"
+     popping up over a working station helper would be pure noise. */
+  async function tellPageQuietly(message) {
+    try {
+      var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]) { await chrome.tabs.sendMessage(tabs[0].id, message); }
+    } catch (e) { /* no overlay on this page; the big spelling still shows */ }
+  }
+
   function openPermissionPage() {
     chrome.tabs.create({ url: chrome.runtime.getURL('permission.html') });
   }
@@ -264,6 +276,12 @@
     /* Spoken in the user's language -- but the name itself is shown, not read
        out letter by letter, which in Telugu would be worse than useless. */
     speak(T(G.station.nowType, lang), lang);
+
+    /* Tell the page which name to watch for. When the site opens its own
+       suggestion list, the overlay rings the matching one and says which it
+       is. It still does not pick it -- the user does. */
+    tellPageQuietly({ type: 'DAARI_RING_SUGGESTION', name: found.en, lang: lang });
+
     return found;
   }
 

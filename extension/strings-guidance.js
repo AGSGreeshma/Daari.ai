@@ -265,6 +265,16 @@ self.DAARI_GUIDANCE = {
       en: 'Find it',
       hi: 'ढूँढिए',
       te: 'వెతకండి'
+    },
+
+    /* Said when the site's own suggestion list opens and Daari has moved its
+       ring onto the matching one. {name} is the station spelling the site
+       printed, left in Latin letters on purpose: the whole task is to match it
+       by eye against what is on the screen. */
+    pickThisOne: {
+      en: 'Pick the one that says {name}',
+      hi: '{name} लिखा हुआ विकल्प चुनिए',
+      te: '{name} అని ఉన్న దాన్ని సెలెక్ట్ చేయండి'
     }
   },
 

@@ -173,6 +173,11 @@
     clsBox.appendChild(option);
   });
 
+  /* Station suggestions on both boxes. Real sites want a station CHOSEN from a
+     list, not typed, so the demo behaves the same way. */
+  YDR.attachAutocomplete(fromBox);
+  YDR.attachAutocomplete(toBox);
+
   /* Prefill from whatever was searched last time, so going "back" feels
      natural. The date defaults to today. */
   var saved = YDR.journey();
