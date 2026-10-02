@@ -408,6 +408,195 @@ console.log('\n0c. Onboarding: language, then how much help');
     check('every onboarding string exists in te, hi and en', missing.join(','), '');
   }
 }
+console.log('\n0d. The path: where you are in the journey');
+{
+  /* "Step 7 of 15" is a number. "You are on the passenger page and payment is
+     next" is a map, and for somebody who has never booked anything online the
+     map is the thing.
+
+     It is drawn from the step number the worker already broadcasts -- the panel
+     asks for nothing new. So the one thing that can go wrong is the milestone
+     boundaries drifting away from the recipe they describe, which is what the
+     last check here guards. */
+  const { loadPanel } = require(path.join(ROOT, 'tests', 'smoke-panel.js'));
+
+  /* The dots, as a reader of the panel would see them. */
+  function dots(panel) {
+    return panel.el.path.children.map((row) => {
+      const dot = row.children[0];
+      const label = row.children[1];
+      const state = /is-done/.test(row.className) ? 'done'
+        : /is-now/.test(row.className) ? 'now' : 'ahead';
+      return { state: state, tick: dot.textContent, label: label.textContent };
+    });
+  }
+
+  async function at(number, extra) {
+    const panel = loadPanel({ lang: 'en', seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    panel.chrome.__onMessage(Object.assign({
+      type: 'DAARI_STATUS', active: true, number: number, total: 15,
+      flowId: 'book-ticket'
+    }, extra || {}));
+    return panel;
+  }
+
+  // ---- nothing running, nothing drawn -------------------------------
+  {
+    const panel = loadPanel({ seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: false });
+    check('with nothing running the path is hidden', panel.el.path.hidden, true);
+    check('  and the finished card too', panel.el.doneCard.hidden, true);
+  }
+
+  // ---- the five milestones of a booking -----------------------------
+  {
+    const panel = await at(1);
+    const shown = dots(panel);
+    check('a booking shows five milestones', shown.length, 5);
+    check('  named after the PAGES, which is what the user can see',
+      shown.map((d) => d.label).join(','), 'Search,Trains,Passenger,Payment,Ticket');
+    check('  with the first one current', shown[0].state, 'now');
+    check('  and the rest still ahead',
+      shown.slice(1).every((d) => d.state === 'ahead'), true);
+    check('  and nothing ticked yet',
+      shown.every((d) => d.tick === ''), true);
+  }
+
+  // ---- it moves as the steps move -----------------------------------
+  {
+    /* Boundaries: search 1-4, trains 5, passenger 6-12, payment 13-14,
+       ticket 15 (step numbers, which are one-based). */
+    const expected = [
+      [1, 0], [4, 0],          // still searching
+      [5, 1],                  // the results page
+      [6, 2], [12, 2],         // the passenger page
+      [13, 3], [14, 3],        // paying
+      [15, 4]                  // the ticket
+    ];
+    let wrong = [];
+    for (const [number, want] of expected) {
+      const panel = await at(number);
+      const shown = dots(panel);
+      const now = shown.findIndex((d) => d.state === 'now');
+      if (now !== want) {
+        wrong.push('step ' + number + ' glowed milestone ' + now + ', wanted ' + want);
+      }
+    }
+    check('the glowing milestone follows the step number', wrong.join(' | '), '');
+  }
+
+  // ---- what is behind you gets a tick -------------------------------
+  {
+    const shown = dots(await at(13));          // paying
+    check('on the payment milestone, three are behind',
+      shown.filter((d) => d.state === 'done').length, 3);
+    check('  and each of those is ticked',
+      shown.filter((d) => d.state === 'done').every((d) => d.tick === '✓'), true);
+    check('  payment itself is the one glowing', shown[3].state, 'now');
+    check('  and the ticket is still ahead', shown[4].state, 'ahead');
+  }
+
+  // ---- finished ticks everything ------------------------------------
+  {
+    const panel = await at(15, { finished: true });
+    const shown = dots(panel);
+    check('when it is finished every milestone is ticked',
+      shown.every((d) => d.state === 'done'), true);
+    check('  and the finished card appears', panel.el.doneCard.hidden, false);
+    check('  saying so in the chosen language', panel.el.doneWords.textContent, 'Finished');
+  }
+
+  // ---- the PNR flow has its own, shorter path -----------------------
+  {
+    const panel = loadPanel({ lang: 'en', seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: true, number: 2,
+      total: 4, flowId: 'check-pnr' });
+    const shown = dots(panel);
+    check('checking a PNR shows two milestones', shown.length, 2);
+    check('  and step 2 is on the second one', shown[1].state, 'now');
+    check('  with the first ticked', shown[0].tick, '✓');
+  }
+
+  // ---- NO SAVED ROUTE: Daari does not draw a map it does not have ---
+  {
+    /* The honest picture. Inventing five milestones for a site we have never
+       seen would be the same lie as "Step 3 of 15" on irctc.co.in, which is a
+       bug this project has already shipped once. */
+    const panel = loadPanel({ lang: 'en', seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: true, number: 3,
+      total: 0, flowId: null });
+    const shown = dots(panel);
+    check('with no saved route there is one dot, not five', shown.length, 1);
+    check('  saying only which step it is', shown[0].label, 'Step 3');
+    check('  and the path is marked as the plain kind',
+      /path-plain/.test(panel.el.path.className), true);
+  }
+
+  // ---- off its own site, the same honesty --------------------------
+  {
+    const panel = await at(3, { offSite: true, total: 0 });
+    const shown = dots(panel);
+    check('off a recipe’s own site it does not draw that recipe’s path',
+      shown.length, 1);
+    check('  it says Step 3, not Step 3 of 15', shown[0].label, 'Step 3');
+  }
+
+  // ---- a language change redraws it -------------------------------
+  {
+    const panel = await at(5);
+    check('the milestone is in English', dots(panel)[1].label, 'Trains');
+    const telugu = panel.el.langs.children.filter((c) => c.dataset.code === 'te')[0];
+    telugu._fire('click');
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: true, number: 5,
+      total: 15, flowId: 'book-ticket' });
+    check('  and in Telugu after switching',
+      dots(panel)[1].label, panel.sandbox.DAARI_GUIDANCE.pathLabels.results.te);
+  }
+
+  // ---- THE BOUNDARIES MUST MATCH THE RECIPES ----------------------
+  {
+    /* The milestones are display data in sidepanel.js, and the pages they
+       describe live in the recipe JSON. Nothing stops those two drifting apart
+       except this check: add a step to the middle of the booking recipe and the
+       dots would quietly glow one milestone early for the rest of the flow. */
+    const src = fs.readFileSync(path.join(EXT, 'sidepanel.js'), 'utf8');
+    const block = src.slice(src.indexOf('var MILESTONES = {'),
+                            src.indexOf('/* Draw the path for this status'));
+
+    const files = { 'book-ticket': 'practice-book-ticket',
+                    'check-pnr': 'practice-check-pnr' };
+    let drift = [];
+    Object.keys(files).forEach((flowId) => {
+      const recipe = JSON.parse(fs.readFileSync(
+        path.join(EXT, 'recipes', files[flowId] + '.json'), 'utf8'));
+
+      /* The first step index of each page, in order, straight from the recipe. */
+      const real = [];
+      recipe.steps.forEach((step, i) => {
+        if (step.page && !real.some((p) => p.page === step.page)) {
+          real.push({ page: step.page, at: i });
+        }
+      });
+
+      /* The "at" values the panel believes, for this flow. */
+      const chunk = block.slice(block.indexOf("'" + flowId + "'"));
+      const claimed = (chunk.slice(0, chunk.indexOf(']')).match(/at:\s*(\d+)/g) || [])
+        .map((m) => Number(m.replace(/[^0-9]/g, '')));
+
+      if (claimed.join(',') !== real.map((p) => p.at).join(',')) {
+        drift.push(flowId + ': panel says [' + claimed.join(',') +
+                   '] but the recipe starts its pages at [' +
+                   real.map((p) => p.at).join(',') + ']');
+      }
+    });
+    check('the milestone boundaries match the recipes they describe',
+      drift.join(' | '), '');
+  }
+}
 console.log('\n1. Recipes load and are well formed');
 {
   for (const file of ['practice-book-ticket', 'practice-check-pnr']) {

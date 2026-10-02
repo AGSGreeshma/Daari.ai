@@ -31,8 +31,19 @@
     </div>
   </div>
 
-  <h1>Daari</h1>
-  <p class="tagline">I show you the path. You walk it.</p>
+  <!-- The logo mark: a winding path that ends in a dot. Inline rather than a
+       file, so it cannot fail to load and needs no web_accessible_resource. -->
+  <div class="brand">
+    <svg class="mark mark-small" viewBox="0 0 72 44" aria-hidden="true">
+      <path d="M4 38 C 18 38, 14 22, 28 22 C 42 22, 38 7, 54 7"
+            fill="none" stroke="#F2A007" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="60" cy="7" r="7" fill="currentColor"/>
+    </svg>
+    <div>
+      <h1>Daari</h1>
+      <p class="tagline">I show you the path. You walk it.</p>
+    </div>
+  </div>
 
   <p class="label">Language</p>
   <div class="langs" id="langs">
@@ -78,6 +89,10 @@
 
   <p class="label">Guidance <span class="counter" id="counter"></span></p>
 
+  <!-- Where you are in the journey. Built by sidepanel.js from the step number
+       the worker already broadcasts -- it asks for nothing new. -->
+  <div class="path" id="path" hidden></div>
+
   <div class="instruction" id="instruction"></div>
 
   <!-- Shown only when the ringed box is a station box. Knowing which box to
@@ -97,6 +112,13 @@
       <p class="station-code" id="stationCode"></p>
     </div>
     <p class="station-unknown" id="stationUnknown" hidden></p>
+  </div>
+
+  <!-- Finished. Its own card rather than another line of text, because this is
+       the one moment the user is allowed to feel pleased. -->
+  <div class="done-card" id="doneCard" hidden>
+    <span class="done-tick" id="doneTick">&#10003;</span>
+    <span class="done-words" id="doneWords"></span>
   </div>
 
   <!-- The confirm gate. Hidden until Daari refuses to point at something

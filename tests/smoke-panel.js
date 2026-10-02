@@ -47,7 +47,6 @@ function makeElement(id) {
     /* The real panel gets this from the markup; so does the fake. */
     hidden: STARTS_HIDDEN.has(id),
     value: '',
-    textContent: '',
     innerHTML: '',
     className: '',
     placeholder: '',
@@ -84,6 +83,20 @@ function makeElement(id) {
     },
     _listens: (name) => (listeners[name] || []).length > 0
   };
+
+  /* In a real browser, setting textContent to '' REMOVES EVERY CHILD. The fake
+     used to treat it as a plain string, so a panel that emptied a container and
+     refilled it appeared to work while the children piled up invisibly -- the
+     path drew five milestones, then ten, and a test reading children[1] got the
+     stale first copy. Modelled properly, so duplicated DOM is visible. */
+  let text = '';
+  Object.defineProperty(el, 'textContent', {
+    get: () => text,
+    set: (value) => {
+      text = String(value === undefined || value === null ? '' : value);
+      if (text === '') { el.children.length = 0; }
+    }
+  });
   return el;
 }
 

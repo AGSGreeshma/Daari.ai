@@ -85,7 +85,12 @@
     stationLabel: document.getElementById('stationLabel'),
     stationName: document.getElementById('stationName'),
     stationCode: document.getElementById('stationCode'),
-    stationUnknown: document.getElementById('stationUnknown')
+    stationUnknown: document.getElementById('stationUnknown'),
+
+    /* The path, and the finished card */
+    path: document.getElementById('path'),
+    doneCard: document.getElementById('doneCard'),
+    doneWords: document.getElementById('doneWords')
   };
 
   /* The recipe "Start demo" forces, for when you want the booking walk without
@@ -215,6 +220,99 @@
   }
 
   /* =================================================================
+     THE PATH -- where you are in the journey
+
+     Daari means path, and this is the only place the product says so visually.
+     For somebody who has never booked anything online, "step 7 of 15" is a
+     number; "you are on the passenger page and payment comes next" is a map.
+
+     Entirely presentational, and it asks the worker for NOTHING NEW. The
+     milestones are page boundaries, which are a property of a recipe we already
+     ship, so they are written here as display data and keyed by the flowId the
+     status broadcast already carries. Nothing about the flow depends on this
+     being right -- at worst a dot glows one milestone early.
+
+     The step indexes below are read off the recipes:
+       book-ticket  index@0  results@4  passenger@5  payment@12  confirmation@14
+       check-pnr    index@0  pnr@1
+     ================================================================= */
+
+  var MILESTONES = {
+    'book-ticket': [
+      { at: 0,  key: 'search' },
+      { at: 4,  key: 'results' },
+      { at: 5,  key: 'passenger' },
+      { at: 12, key: 'payment' },
+      { at: 14, key: 'done' }
+    ],
+    'check-pnr': [
+      { at: 0, key: 'start' },
+      { at: 1, key: 'pnr' }
+    ]
+  };
+
+  /* Draw the path for this status, or hide it when there is nothing to draw. */
+  function renderPath(status) {
+    el.path.textContent = '';
+
+    if (!status || !status.active) { el.path.hidden = true; return; }
+
+    var plan = MILESTONES[status.flowId];
+
+    /* No saved route for this site, or a recipe that is not running here: Daari
+       does not draw a map it does not have. A single dot and "Step n" is the
+       honest picture. */
+    if (!plan || status.offSite || !status.total) {
+      el.path.hidden = false;
+      el.path.className = 'path path-plain';
+      el.path.appendChild(milestoneNode(
+        T(G.pathLabels.step, lang, { n: status.number }), 'now', false));
+      return;
+    }
+
+    el.path.hidden = false;
+    el.path.className = 'path';
+
+    /* Which milestone are we on? The last one whose first step we have reached.
+       Done when the flow is finished, so the final tick appears. */
+    var current = 0;
+    for (var i = 0; i < plan.length; i++) {
+      if ((status.number - 1) >= plan[i].at) { current = i; }
+    }
+
+    plan.forEach(function (stop, index) {
+      var state = 'ahead';
+      if (status.finished || index < current) {
+        state = 'done';
+      } else if (index === current) {
+        state = status.finished ? 'done' : 'now';
+      }
+      el.path.appendChild(milestoneNode(
+        T(G.pathLabels[stop.key], lang), state, index === plan.length - 1));
+    });
+  }
+
+  /* One dot, its label, and the line down to the next one. */
+  function milestoneNode(label, state, isLast) {
+    var row = document.createElement('div');
+    row.className = 'milestone is-' + state + (isLast ? ' is-last' : '');
+
+    var dot = document.createElement('span');
+    dot.className = 'dot';
+    /* A tick on what is behind you. Nothing on what is ahead. */
+    dot.textContent = (state === 'done') ? '✓' : '';
+    row.appendChild(dot);
+
+    var words = document.createElement('span');
+    words.className = 'milestone-label';
+    words.textContent = label;
+    words.setAttribute('lang', lang);
+    row.appendChild(words);
+
+    return row;
+  }
+
+  /* =================================================================
      The station helper
 
      The gap it closes: the user can see exactly which box to fill and still
@@ -336,6 +434,8 @@
     }
 
     paintStationLabels();
+    el.doneWords.textContent = T(S.ui.finished, lang);
+    el.doneWords.setAttribute('lang', lang);
 
     document.documentElement.setAttribute('lang', lang);
   }
@@ -365,6 +465,8 @@
       el.manualBack.style.display = 'none';
       el.devBody.textContent = 'Nothing running.';
       hideStationHelper();
+      renderPath(null);
+      el.doneCard.hidden = true;
       return;
     }
 
@@ -384,6 +486,12 @@
     var guiding = !status.awaitingConfirm && !status.finished;
     el.manualDone.style.display = guiding ? 'block' : 'none';
     el.manualBack.style.display = guiding ? 'block' : 'none';
+
+    renderPath(status);
+
+    /* Finished gets its own card. The instruction card still carries the words
+       Daari spoke; this is the tick beside them. */
+    el.doneCard.hidden = !status.finished;
 
     /* The station helper, when the worker says the ringed box is a station box.
        The panel decides nothing about this itself. */

@@ -212,6 +212,30 @@ self.DAARI_GUIDANCE = {
   },
 
   /* ------------------------------------------------------------------
+     7. THE PATH -- the milestones shown down the side of the panel
+
+     Daari means path, and this is the only place the product says so visually:
+     where you are in the journey, what you have already done, what is still
+     ahead. For somebody who has never booked anything online, "step 7 of 15"
+     is a number; "you are on the passenger page, payment is next" is a map.
+
+     These are PAGE names, not step names, because a page is what the user can
+     see. Two or three words each -- they sit in a 70px column.
+     ------------------------------------------------------------------ */
+  pathLabels: {
+    search:    { en: 'Search',    hi: 'खोज',        te: 'వెతకడం' },
+    results:   { en: 'Trains',    hi: 'ट्रेनें',      te: 'ట్రైన్లు' },
+    passenger: { en: 'Passenger', hi: 'यात्री',      te: 'ప్రయాణికుడు' },
+    payment:   { en: 'Payment',   hi: 'भुगतान',     te: 'చెల్లింపు' },
+    done:      { en: 'Ticket',    hi: 'टिकट',       te: 'టికెట్' },
+    start:     { en: 'Start',     hi: 'शुरू',       te: 'మొదలు' },
+    pnr:       { en: 'PNR',       hi: 'PNR',        te: 'PNR' },
+    /* Shown instead of a milestone when there is no saved route for the site,
+       so the panel never draws a map it does not have. */
+    step:      { en: 'Step {n}',  hi: 'चरण {n}',    te: 'అడుగు {n}' }
+  },
+
+  /* ------------------------------------------------------------------
      3. THE STATION HELPER
 
      Shown when the ringed box is a station box. The user says the name in

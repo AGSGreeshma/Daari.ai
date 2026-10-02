@@ -657,3 +657,158 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   outline: 3px solid var(--indigo);
   outline-offset: 2px;
 }
+
+/* ---------- the header, with the mark ---------- */
+
+.brand { display: flex; align-items: flex-start; gap: 11px; }
+.brand h1 { margin: 0; }
+.brand .tagline { margin: 2px 0 0; }
+
+.mark { display: block; width: 72px; height: auto; margin: 0 0 10px; color: var(--indigo); }
+/* The small one, beside the name in the panel header. */
+.mark-small { width: 46px; margin: 2px 0 0; flex-shrink: 0; }
+
+/* ---------- THE PATH ----------
+
+   Daari means path. This is the only place the product says so visually: where
+   you are, what is behind you, what is still ahead.
+
+   The dots are offset left and right by a few pixels so the connecting line
+   bends -- a winding path, not a progress bar. A progress bar says "70% done";
+   a path says "you are here". */
+
+.path {
+  margin: 0 0 16px;
+  padding: 14px 12px 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.path[hidden] { display: none; }
+
+.milestone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+}
+
+/* The line down to the next milestone. Drawn from the dot, not between rows, so
+   it cannot drift out of line when a label wraps onto two lines. */
+.milestone::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 30px;
+  bottom: -10px;
+  width: 3px;
+  background: var(--line);
+  border-radius: 2px;
+}
+.milestone.is-last::before { display: none; }
+
+.dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--cream);
+  border: 3px solid var(--line);
+  border-radius: 50%;
+  color: var(--indigo);
+}
+
+.milestone-label {
+  font-size: var(--text-body);
+  color: var(--indigo-soft);
+}
+
+/* Behind you: a tick, in the done green. */
+.milestone.is-done .dot {
+  background: var(--green-wash);
+  border-color: var(--green);
+  color: var(--ink-good);
+}
+.milestone.is-done::before { background: var(--green); }
+.milestone.is-done .milestone-label { color: var(--indigo-soft); }
+
+/* Where you are now: marigold, filled, and the only label in full strength.
+   The glow is a shadow rather than an animation, so it still reads under
+   reduced motion. */
+.milestone.is-now .dot {
+  background: var(--marigold);
+  border-color: var(--marigold);
+  box-shadow: 0 0 0 5px rgba(242, 160, 7, 0.26);
+}
+.milestone.is-now .milestone-label {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--indigo);
+}
+
+/* Still ahead: outlined, quiet. */
+.milestone.is-ahead .dot { background: var(--card); }
+
+/* No saved route for this site. One dot, and the honest truth: "Step 3". */
+.path-plain .milestone::before { display: none; }
+.path-plain .dot {
+  background: var(--card);
+  border-style: dashed;
+  border-color: var(--indigo-soft);
+}
+
+/* ---------- finished ---------- */
+
+.done-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 0 0 14px;
+  padding: 16px 18px;
+  background: var(--green-wash);
+  border-left: 5px solid var(--green);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.done-card[hidden] { display: none; }
+
+.done-tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--green);
+  border-radius: 50%;
+  /* White on #2E8B57 is 4.25:1 -- AA for large text, which this is at 25px. */
+  color: #FFFFFF;
+  animation: daari-tick 420ms var(--ease) both;
+}
+
+/* A single gentle bounce, once. Not confetti: this user is 68 and reading in
+   their second script, and a shower of moving dots over the one sentence that
+   says the ticket is booked would be cruelty dressed as delight. The global
+   reduced-motion rule in tokens.css flattens even this. */
+@keyframes daari-tick {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.done-words {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--indigo);
+}

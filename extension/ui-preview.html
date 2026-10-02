@@ -150,8 +150,17 @@
 
   <p class="pv-cap pv-wide">3 — idle: nothing running yet</p>
   <div class="pv-panel">
-    <h1>Daari</h1>
-    <p class="tagline">I show you the path. You walk it.</p>
+    <div class="brand">
+      <svg class="mark mark-small" viewBox="0 0 72 44" aria-hidden="true">
+        <path d="M4 38 C 18 38, 14 22, 28 22 C 42 22, 38 7, 54 7"
+              fill="none" stroke="#F2A007" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="60" cy="7" r="7" fill="currentColor"/>
+      </svg>
+      <div>
+        <h1>Daari</h1>
+        <p class="tagline">I show you the path. You walk it.</p>
+      </div>
+    </div>
     <button class="change-setup" lang="te">భాష లేదా సహాయం మార్చండి  ·  పూర్తిగా సహాయం చేయండి</button>
     <p class="label">Language</p>
     <div class="langs">
@@ -171,6 +180,27 @@
     <p class="mic-hint" lang="te">వింటున్నాను…</p>
     <button class="mic-cancel" style="display:block" lang="te">రద్దు చేయండి</button>
     <div class="transcript" lang="te">విజయవాడ నుండి కాజీపేటకు టికెట్ కావాలి</div>
+  </div>
+
+  <p class="pv-cap pv-wide">4b — the path: on the passenger page, two still ahead</p>
+  <div class="pv-panel">
+    <p class="label">Guidance <span class="counter">అడుగు 7 / 15</span></p>
+    <div class="path">
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">వెతకడం</span></div>
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">ట్రైన్లు</span></div>
+      <div class="milestone is-now"><span class="dot"></span><span class="milestone-label" lang="te">ప్రయాణికుడు</span></div>
+      <div class="milestone is-ahead"><span class="dot"></span><span class="milestone-label" lang="te">చెల్లింపు</span></div>
+      <div class="milestone is-ahead is-last"><span class="dot"></span><span class="milestone-label" lang="te">టికెట్</span></div>
+    </div>
+  </div>
+
+  <p class="pv-cap pv-wide">4c — the path with no saved route for the site</p>
+  <div class="pv-panel">
+    <div class="path path-plain">
+      <div class="milestone is-now is-last"><span class="dot"></span><span class="milestone-label" lang="te">అడుగు 3</span></div>
+    </div>
+    <div class="msg info" style="display:block">I have no saved route for this site, so I will read the page
+      myself. I will tell you if I am unsure rather than guessing.</div>
   </div>
 
   <p class="pv-cap pv-wide">5 — the current step, full mode, Telugu</p>
@@ -242,10 +272,21 @@
     <button class="confirm" style="display:block" lang="te">నేను చూశాను - కొనసాగించండి</button>
   </div>
 
-  <p class="pv-cap pv-wide">10 — finished</p>
+  <p class="pv-cap pv-wide">10 — finished: every milestone ticked, and the done card</p>
   <div class="pv-panel">
-    <div class="instruction" lang="te" style="display:block; border-left-color: var(--green); background: var(--green-wash)">
-      <span class="which" style="color: var(--ink-good)">✅ పూర్తయింది</span>
+    <div class="path">
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">వెతకడం</span></div>
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">ట్రైన్లు</span></div>
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">ప్రయాణికుడు</span></div>
+      <div class="milestone is-done"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">చెల్లింపు</span></div>
+      <div class="milestone is-done is-last"><span class="dot">&#10003;</span><span class="milestone-label" lang="te">టికెట్</span></div>
+    </div>
+    <div class="done-card">
+      <span class="done-tick">&#10003;</span>
+      <span class="done-words" lang="te">పూర్తయింది</span>
+    </div>
+    <div class="instruction" lang="te" style="display:block">
+      <span class="which">అడుగు 15 / 15</span>
       <span>టికెట్ బుక్ అయింది. మీ PNR స్క్రీన్ మీద ఉంది - ఆ నంబర్ దగ్గర పెట్టుకోండి.</span>
     </div>
   </div>
