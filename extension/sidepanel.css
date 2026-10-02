@@ -480,3 +480,61 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0 16px; }
   cursor: pointer;
 }
 .change-setup:hover { border-color: #c9c3b6; color: var(--ink); }
+
+/* ---------- the station helper ----------
+
+   The one moment in a booking where ringing the right box is not enough: the
+   user can see where to type and still have no idea how to spell the place in
+   Latin letters. So the answer is printed very large, in one colour, with
+   nothing beside it to read. */
+.station {
+  margin: 0 0 14px;
+  padding: 12px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+.station[hidden] { display: none; }
+
+.station-prompt { margin: 0 0 9px; font-size: 15px; color: var(--ink); }
+
+.station-ask { display: flex; gap: 7px; }
+.station-ask input {
+  flex: 1;
+  padding: 11px;
+  font-size: 16px;
+  font-family: inherit;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+}
+.station-ask button {
+  padding: 11px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.station-ask button:hover { border-color: #c9c3b6; }
+
+.station-answer { margin-top: 12px; }
+.station-answer[hidden] { display: none; }
+.station-label { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* The thing the user is copying. Nothing on this panel is bigger. */
+.station-name {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: bold;
+  line-height: 1.15;
+  letter-spacing: 0.5px;
+  color: var(--orange);
+  word-break: break-word;
+}
+.station-code { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+
+.station-unknown { margin: 11px 0 0; font-size: 15px; color: #b3261e; }
+.station-unknown[hidden] { display: none; }

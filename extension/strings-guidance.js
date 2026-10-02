@@ -79,6 +79,63 @@ self.DAARI_GUIDANCE = {
   },
 
   /* ------------------------------------------------------------------
+     3. THE STATION HELPER
+
+     Shown when the ringed box is a station box. The user says the name in
+     their own language; Daari shows the English spelling, large, for them to
+     copy. Daari does not type it -- the whole point is that they can.
+     ------------------------------------------------------------------ */
+  station: {
+
+    /* The invitation, shown above the box. */
+    prompt: {
+      en: 'Say or type your station',
+      hi: 'अपना स्टेशन बोलिए या लिखिए',
+      te: 'మీ స్టేషన్ చెప్పండి లేదా టైప్ చేయండి'
+    },
+
+    /* The label above the big English spelling. Short, because the name under
+       it is what matters. */
+    typeThis: {
+      en: 'Type:',
+      hi: 'यह लिखिए:',
+      te: 'ఇది టైప్ చేయండి:'
+    },
+
+    /* Said out loud once the name is resolved. The spelling itself is shown,
+       not spoken letter by letter -- reading it out in Telugu would be worse
+       than useless. */
+    nowType: {
+      en: 'Type this name in the ringed box.',
+      hi: 'यह नाम घेरे हुए बॉक्स में लिखिए।',
+      te: 'ఈ పేరు గుర్తు పెట్టిన బాక్స్‌లో టైప్ చేయండి.'
+    },
+
+    /* The station code, offered because many older travellers know the code
+       better than the spelling. */
+    orCode: {
+      en: 'The short code works too:',
+      hi: 'छोटा कोड भी चलेगा:',
+      te: 'చిన్న కోడ్ కూడా పనిచేస్తుంది:'
+    },
+
+    /* The honest answer. Never a guessed station: sending somebody to the
+       wrong city is far worse than admitting ignorance. */
+    unknown: {
+      en: 'I do not know that station. Please type it yourself.',
+      hi: 'वह स्टेशन मुझे नहीं पता। आप ही लिख दीजिए।',
+      te: 'ఆ స్టేషన్ నాకు తెలియదు. మీరే టైప్ చేయండి.'
+    },
+
+    /* The button on the typing fallback. */
+    find: {
+      en: 'Find it',
+      hi: 'ढूँढिए',
+      te: 'వెతకండి'
+    }
+  },
+
+  /* ------------------------------------------------------------------
      2. FULL MODE -- what each page is for, and why each step exists
 
      Keyed by the recipe's own "task" name, then by step number. Written out

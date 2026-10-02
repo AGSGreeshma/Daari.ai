@@ -74,7 +74,18 @@
     onboardNote: document.getElementById('onboardNote'),
     helpLight: document.getElementById('helpLight'),
     helpFull: document.getElementById('helpFull'),
-    changeSetup: document.getElementById('changeSetup')
+    changeSetup: document.getElementById('changeSetup'),
+
+    /* The station helper */
+    stationBox: document.getElementById('stationBox'),
+    stationPrompt: document.getElementById('stationPrompt'),
+    stationInput: document.getElementById('stationInput'),
+    stationFind: document.getElementById('stationFind'),
+    stationAnswer: document.getElementById('stationAnswer'),
+    stationLabel: document.getElementById('stationLabel'),
+    stationName: document.getElementById('stationName'),
+    stationCode: document.getElementById('stationCode'),
+    stationUnknown: document.getElementById('stationUnknown')
   };
 
   /* The recipe "Start demo" forces, for when you want the booking walk without
@@ -191,6 +202,71 @@
     chrome.storage.local.set({ seenOnboarding: true });
   }
 
+  /* =================================================================
+     The station helper
+
+     The gap it closes: the user can see exactly which box to fill and still
+     have no idea how to write "విజయవాడ" in the Latin letters the site insists
+     on. Daari resolves what they said and prints the spelling, large, for them
+     to copy.
+
+     It does NOT type it. Rule 1 is not bent here, and what they type is still
+     never read back.
+     ================================================================= */
+
+  function paintStationLabels() {
+    el.stationPrompt.textContent = T(G.station.prompt, lang);
+    el.stationPrompt.setAttribute('lang', lang);
+    el.stationFind.textContent = T(G.station.find, lang);
+    el.stationInput.placeholder = T(G.station.prompt, lang);
+    el.stationInput.setAttribute('lang', lang);
+  }
+
+  function showStationHelper() {
+    el.stationBox.hidden = false;
+    paintStationLabels();
+  }
+
+  function hideStationHelper() {
+    el.stationBox.hidden = true;
+    /* Clear the previous answer too. A station name left over from the From
+       box, still showing while the To box is ringed, would be copied. */
+    el.stationAnswer.hidden = true;
+    el.stationUnknown.hidden = true;
+    el.stationInput.value = '';
+  }
+
+  /* Resolve what was said, and show it. Returns the station, or null. */
+  function resolveStation(spoken) {
+    var found = DAARI_RESOLVE_STATION(spoken);
+
+    if (!found) {
+      /* The honest answer. Never a guessed station -- sending somebody to the
+         wrong city is far worse than admitting ignorance. */
+      el.stationAnswer.hidden = true;
+      el.stationUnknown.hidden = false;
+      el.stationUnknown.textContent = T(G.station.unknown, lang);
+      el.stationUnknown.setAttribute('lang', lang);
+      speak(T(G.station.unknown, lang), lang);
+      return null;
+    }
+
+    el.stationUnknown.hidden = true;
+    el.stationAnswer.hidden = false;
+    el.stationLabel.textContent = T(G.station.typeThis, lang);
+    el.stationLabel.setAttribute('lang', lang);
+    /* The spelling the site wants, exactly. Latin letters, not translated. */
+    el.stationName.textContent = found.en;
+    el.stationName.setAttribute('lang', 'en');
+    el.stationCode.textContent = T(G.station.orCode, lang) + ' ' + found.code;
+    el.stationCode.setAttribute('lang', lang);
+
+    /* Spoken in the user's language -- but the name itself is shown, not read
+       out letter by letter, which in Telugu would be worse than useless. */
+    speak(T(G.station.nowType, lang), lang);
+    return found;
+  }
+
   /* Put every visible word into the chosen language. */
   function applyLanguage() {
     var buttons = el.langs.querySelectorAll('.lang');
@@ -241,6 +317,8 @@
         (onboardButtons[j].dataset.code === lang ? ' on' : '');
     }
 
+    paintStationLabels();
+
     document.documentElement.setAttribute('lang', lang);
   }
 
@@ -268,6 +346,7 @@
       el.manualDone.style.display = 'none';
       el.manualBack.style.display = 'none';
       el.devBody.textContent = 'Nothing running.';
+      hideStationHelper();
       return;
     }
 
@@ -287,6 +366,14 @@
     var guiding = !status.awaitingConfirm && !status.finished;
     el.manualDone.style.display = guiding ? 'block' : 'none';
     el.manualBack.style.display = guiding ? 'block' : 'none';
+
+    /* The station helper, when the worker says the ringed box is a station box.
+       The panel decides nothing about this itself. */
+    if (status.stationBox) {
+      if (el.stationBox.hidden) { showStationHelper(); }
+    } else {
+      hideStationHelper();
+    }
 
     showDeveloperDetails(status);
   }
@@ -688,6 +775,18 @@
       return;
     }
 
+    /* While the station helper is open, speech is a station name, not a new
+       goal. Sending it to the goal box would restart the booking from nothing
+       at the exact moment the user was trying to answer a question. */
+    if (!el.stationBox.hidden) {
+      setMicState('idle');
+      setTranscript(text, true);
+      el.stationInput.value = text;
+      resolveStation(text);
+      heard = '';
+      return;
+    }
+
     setMicState('confirming');
     setTranscript(text, true);
     el.confirmText.value = text;
@@ -898,6 +997,15 @@
     finishOnboarding();
   });
   el.changeSetup.addEventListener('click', showOnboarding);
+
+  /* The typing fallback for the station helper, for a name the recogniser keeps
+     mishearing -- or a room too noisy to speak in. */
+  el.stationFind.addEventListener('click', function () {
+    resolveStation(el.stationInput.value);
+  });
+  el.stationInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { resolveStation(el.stationInput.value); }
+  });
 
   /* The manual way in, for when you want the booking walk without speaking.
      Forces the recipe rather than matching a goal. */

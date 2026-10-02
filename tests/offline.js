@@ -1590,6 +1590,237 @@ console.log('\n2m. FULL mode: what the page is for, and why this step');
   aiFail = null;
   aiReply = null;
 }
+console.log('\n2n. The station helper: what they said, spelled how the site wants it');
+{
+  /* The hardest moment in the whole booking, and the one ringing a box cannot
+     fix: the user can see exactly where to type and still have no idea how to
+     write "విజయవాడ" in Latin letters.
+
+     Two rules are load-bearing here:
+       - an unknown name resolves to NOTHING. Sending somebody to the wrong
+         city is far worse than admitting ignorance.
+       - Daari still does not type it. The name is shown to be copied. */
+
+  const R = ctx.self.DAARI_RESOLVE_STATION;
+  const IS = ctx.self.DAARI_IS_STATION_BOX;
+
+  // ---- the same station, in three scripts and several spellings --------
+  {
+    const cases = [
+      ['విజయవాడ', 'VIJAYAWADA'],        ['బెజవాడ', 'VIJAYAWADA'],
+      ['बेज़वाड़ा', 'VIJAYAWADA'],        ['बेजवाडा', 'VIJAYAWADA'],
+      ['bezawada', 'VIJAYAWADA'],        ['vijaywada', 'VIJAYAWADA'],
+      ['BZA', 'VIJAYAWADA'],
+      ['సికింద్రాబాద్', 'SECUNDERABAD'],  ['secunderbad', 'SECUNDERABAD'],
+      ['కాజీపేట', 'KAZIPET'],            ['kazipeta', 'KAZIPET'],
+      ['వైజాగ్', 'VISAKHAPATNAM'],       ['vizag', 'VISAKHAPATNAM'],
+      ['మద్రాసు', 'CHENNAI CENTRAL'],    ['madras', 'CHENNAI CENTRAL'],
+      ['బెంగళూరు', 'KSR BENGALURU'],     ['bangalore', 'KSR BENGALURU'],
+      ['బొంబాయి', 'MUMBAI CSMT'],        ['bombay', 'MUMBAI CSMT'],
+      ['రాజమహేంద్రవరం', 'RAJAHMUNDRY']
+    ];
+    let wrong = [];
+    cases.forEach(([said, want]) => {
+      const got = R(said);
+      if (!got || got.en !== want) {
+        wrong.push(said + ' -> ' + (got ? got.en : 'nothing') + ' (wanted ' + want + ')');
+      }
+    });
+    check('every spelling resolves to the name the site wants', wrong.join(' | '), '');
+  }
+
+  // ---- the longer name wins over the shorter one inside it -------------
+  {
+    check('"new delhi" is not dragged to a looser match', R('new delhi').en, 'NEW DELHI');
+    check('and the code comes back with it', R('new delhi').code, 'NDLS');
+  }
+
+  // ---- AN UNKNOWN NAME RESOLVES TO NOTHING ----------------------------
+  {
+    /* The rule that matters most. Daari would rather say "I do not know" than
+       send a first-time traveller to a city they never named. */
+    ['xyzzy', 'zzzz', 'Narnia', 'Hogsmeade', 'qq'].forEach((said) => {
+      check('"' + said + '" is not guessed at', R(said), null);
+    });
+    check('a single letter is not enough to guess from', R('v'), null);
+    check('nothing at all resolves to nothing', R(''), null);
+    check('and so does rubbish whitespace', R('   '), null);
+  }
+
+  // ---- which boxes get the helper, and which must NOT -----------------
+  {
+    check('From station is a station box', IS(['from station']), true);
+    check('To station is a station box', IS(['To station *']), true);
+    check('Boarding Station is a station box', IS(['Boarding Station']), true);
+    check('a Telugu station label is a station box', IS(['స్టేషన్']), true);
+    check('a Hindi station label is a station box', IS(['स्टेशन']), true);
+
+    /* Offering the station helper on the wrong box is worse than not offering
+       it: the user would be told to type a city name into something that is
+       not a city. So the match is strict, and fails closed. */
+    check('PNR number is NOT a station box', IS(['pnr number']), false);
+    check('Card number is NOT a station box', IS(['card number']), false);
+    check('Age is NOT a station box', IS(['age']), false);
+    check('Mobile number is NOT a station box', IS(['mobile number']), false);
+    check('a bare "From" is NOT enough -- it could be a date',
+      IS(['from']), false);
+    check('nothing at all is NOT a station box', IS([]), false);
+    check('and neither is undefined', IS(undefined), false);
+  }
+
+  // ---- the worker tells the panel, and only on the right steps --------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+
+    const first = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('the From station step is flagged as a station box', first.stationBox, true);
+
+    const second = await call(Object.assign({ type: 'DAARI_STEP_DONE', forStep: 0 },
+      page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('the To station step is too', second.stationBox, true);
+
+    const third = await call(Object.assign({ type: 'DAARI_STEP_DONE', forStep: 1 },
+      page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('the Class dropdown is NOT', !!third.stationBox, false);
+  }
+
+  // ---- never on the payment page, and never on a stop -----------------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+    const s = storage.session.daariSession;
+    s.stepIndex = 12;                            // card number
+    s.confirmedStep = 12;
+    await chrome.storage.session.set({ daariSession: s });
+    const card = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('the card number box is NOT a station box', !!card.stationBox, false);
+
+    const s2 = storage.session.daariSession;
+    s2.stepIndex = 13;                           // Pay, unconfirmed
+    delete s2.confirmedStep;
+    await chrome.storage.session.set({ daariSession: s2 });
+    const pay = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('and a stop is never cluttered with the station helper',
+      !!pay.stationBox, false);
+    check('  the stop itself still fires', pay.gate, true);
+  }
+
+  // ---- a site with NO recipe: the element label is the only clue -------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    aiFail = null;
+    aiRequests.length = 0;
+    aiReply = { elementIndex: 0, speech: 'Type the station you are leaving from',
+                done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
+    await call({ type: 'DAARI_START_FLOW',
+      url: 'https://example.com/trains', goal: 'book a train', tabId: 1 });
+    const step = await call({ type: 'DAARI_PAGE_READY',
+      url: 'https://example.com/trains', title: 'Trains',
+      elements: [{ i: 0, tag: 'input', type: 'text', name: 'Boarding station', filled: false }] });
+    check('with no recipe, the station box is spotted from the label',
+      step.stationBox, true);
+  }
+
+  // ---- the panel: it shows, it resolves, it never types ---------------
+  {
+    const { loadPanel } = require(path.join(ROOT, 'tests', 'smoke-panel.js'));
+    const panel = loadPanel({ lang: 'te', seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+
+    check('the helper starts hidden', panel.el.stationBox.hidden, true);
+
+    /* The worker says this step is a station box. */
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: true, number: 1, total: 15,
+                               stationBox: true });
+    check('a station step shows the helper', panel.el.stationBox.hidden, false);
+    check('  inviting them to say or type it', panel.el.stationPrompt.textContent,
+      panel.sandbox.DAARI_GUIDANCE.station.prompt.te);
+
+    /* Typed in Telugu. */
+    panel.el.stationInput.value = 'విజయవాడ';
+    panel.el.stationFind._fire('click');
+    check('it shows the spelling the site wants', panel.el.stationName.textContent,
+      'VIJAYAWADA');
+    check('  in Latin letters, not translated',
+      panel.el.stationName.getAttribute('lang'), 'en');
+    check('  with the short code as well',
+      panel.el.stationCode.textContent.indexOf('BZA') > 0, true);
+    check('  and no "I do not know" showing', panel.el.stationUnknown.hidden, true);
+
+    /* An unknown name says so, and shows no name at all. */
+    panel.el.stationInput.value = 'Narnia';
+    panel.el.stationFind._fire('click');
+    check('an unknown name says it is unknown', panel.el.stationUnknown.hidden, false);
+    check('  in the chosen language', panel.el.stationUnknown.textContent,
+      panel.sandbox.DAARI_GUIDANCE.station.unknown.te);
+    check('  and shows no station name to copy', panel.el.stationAnswer.hidden, true);
+
+    /* Leaving the station step clears it -- a leftover name beside a different
+       ringed box would be copied into the wrong one. */
+    panel.chrome.__onMessage({ type: 'DAARI_STATUS', active: true, number: 3, total: 15 });
+    check('leaving the step hides the helper', panel.el.stationBox.hidden, true);
+    check('  and clears the answer with it', panel.el.stationAnswer.hidden, true);
+    check('  and empties the box', panel.el.stationInput.value, '');
+
+    /* RULE 1: it tells, it does not do. */
+    check('nothing was sent to the page',
+      panel.toTab.filter((t) => /type|fill|value/i.test(JSON.stringify(t.message))).length, 0);
+  }
+
+  // ---- the station list itself is well formed -------------------------
+  {
+    const list = ctx.self.DAARI_STATIONS;
+    check('the bundled list is not empty', list.length > 10, true);
+
+    let bad = [];
+    list.forEach((station) => {
+      if (!station.en || station.en !== station.en.toUpperCase()) {
+        bad.push(station.en + ': not the upper-case spelling the box wants');
+      }
+      if (!station.code) { bad.push(station.en + ': no code'); }
+      if (!(station.te || []).length) { bad.push(station.en + ': no Telugu name'); }
+      if (!(station.hi || []).length) { bad.push(station.en + ': no Hindi name'); }
+      /* Every station must find ITSELF, or the user will be told it is unknown
+         while it sits in the list. */
+      const back = R(station.en);
+      if (!back || back.en !== station.en) {
+        bad.push(station.en + ': does not resolve to itself');
+      }
+      const byCode = R(station.code);
+      if (!byCode || byCode.en !== station.en) {
+        bad.push(station.en + ': its own code does not resolve to it');
+      }
+    });
+    check('every station has a code, a Telugu and a Hindi name, and finds itself',
+      bad.join(' | '), '');
+
+    /* And every Telugu and Hindi spelling in the list resolves to its own
+       station -- otherwise a name is in the list but unreachable. */
+    let unreachable = [];
+    list.forEach((station) => {
+      (station.te || []).concat(station.hi || []).forEach((name) => {
+        const got = R(name);
+        if (!got || got.en !== station.en) {
+          unreachable.push(name + ' -> ' + (got ? got.en : 'nothing') +
+                           ' (should be ' + station.en + ')');
+        }
+      });
+    });
+    check('every Telugu and Hindi spelling reaches its own station',
+      unreachable.join(' | '), '');
+  }
+
+  aiFail = null;
+  aiReply = null;
+}
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);

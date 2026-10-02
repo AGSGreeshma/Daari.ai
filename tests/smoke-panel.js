@@ -194,7 +194,8 @@ function loadPanel(options) {
   vm.createContext(sandbox);
 
   /* The real files, in the order sidepanel.html loads them. */
-  ['config.js', 'strings.js', 'strings-guidance.js', 'tts.js', 'sidepanel.js'].forEach((file) => {
+  ['config.js', 'strings.js', 'strings-guidance.js', 'stations.js', 'tts.js',
+   'sidepanel.js'].forEach((file) => {
     vm.runInContext(fs.readFileSync(path.join(EXT, file), 'utf8'), sandbox, { filename: file });
   });
 

@@ -175,16 +175,44 @@ function calledNames(code) {
   return found;
 }
 
+/* The scripts an extension page loads, in order, straight out of its HTML. */
+function scriptsIn(htmlFile) {
+  const html = fs.readFileSync(path.join(EXT, htmlFile), 'utf8');
+  const out = [];
+  const pattern = /<script[^>]+src="([^"]+)"/g;
+  let hit;
+  while ((hit = pattern.exec(html)) !== null) { out.push(hit[1]); }
+  return out;
+}
+
+/* What the service worker pulls in before itself. */
+function workerScripts() {
+  const src = fs.readFileSync(path.join(EXT, 'background.js'), 'utf8');
+  const call = src.match(/importScripts\(([^)]*)\)/);
+  const names = call
+    ? (call[1].match(/'[^']+'|"[^"]+"/g) || []).map((q) => q.slice(1, -1))
+    : [];
+  return names.concat(['background.js']);
+}
+
 function run() {
   /* Files that share a global scope can see each other's declarations, so they
-     are checked as groups rather than in isolation. Matches how the manifest
-     loads them. */
+     are checked as groups rather than in isolation.
+
+     Every group is read from the thing that actually does the loading -- the
+     manifest, each page's own HTML, the worker's own importScripts -- and not
+     listed here. A hand-kept list is a second copy of the truth: add a file to
+     sidepanel.html, forget to add it here, and the lint reports a function that
+     is in fact perfectly well defined. That happened, which is why it now
+     reads the real load order. */
+  const manifest = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8'));
+
   const GROUPS = [
-    { name: 'content script', files: ['strings.js', 'safety.js', 'matching.js', 'content/overlay.js'] },
-    { name: 'service worker', files: ['config.js', 'strings.js', 'safety.js', 'matching.js', 'background.js'] },
-    { name: 'side panel', files: ['config.js', 'strings.js', 'tts.js', 'sidepanel.js'] },
-    { name: 'popup', files: ['config.js', 'popup.js'] },
-    { name: 'permission page', files: ['permission.js'] }
+    { name: 'content script', files: manifest.content_scripts[0].js },
+    { name: 'service worker', files: workerScripts() },
+    { name: 'side panel', files: scriptsIn(manifest.side_panel.default_path) },
+    { name: 'popup', files: scriptsIn(manifest.action.default_popup) },
+    { name: 'permission page', files: scriptsIn('permission.html') }
   ];
 
   let problems = 0;

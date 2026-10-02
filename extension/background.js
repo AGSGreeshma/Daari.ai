@@ -19,7 +19,7 @@
    model works alone, and is believed only when it is confident. */
 
 importScripts('config.js', 'strings.js', 'strings-guidance.js', 'safety.js',
-              'matching.js');
+              'matching.js', 'stations.js');
 
 var SESSION_KEY = 'daariSession';
 
@@ -397,6 +397,13 @@ async function decideStep(session, page) {
 
   if (recipeStep && recipeStep.look_for) { payload.look_for = recipeStep.look_for; }
 
+  /* Is the thing we are about to ring a station box? If it is, the panel
+     offers the station helper, because knowing WHICH box to fill does not help
+     somebody who cannot spell the station in Latin letters.
+
+     Decided from the labels, never from anything the user typed. */
+  payload.stationBox = self.DAARI_IS_STATION_BOX(payload.look_for);
+
   payload.stepLabel = payload.total
     ? self.DAARI_T(S.ui.stepOf, lang, { n: payload.number, total: payload.total })
     : self.DAARI_T(S.ui.stepOnly, lang, { n: payload.number });
@@ -539,6 +546,14 @@ async function decideStep(session, page) {
     payload.path = 'ai';
     payload.confidence = ai.confidence;
 
+    /* On a site with no recipe there are no look_for labels, so the only clue
+       that this is a station box is the name of the element the model picked.
+       That name is the page author's label, not anything the user typed. */
+    if (!payload.stationBox) {
+      payload.stationBox =
+        self.DAARI_IS_STATION_BOX([elements[ai.elementIndex].name]);
+    }
+
   } else if (recipeStep && recipeIndex !== -1) {
     payload.index = recipeIndex;
     payload.say = withPageIntro(
@@ -582,6 +597,10 @@ async function decideStep(session, page) {
 
   session.awaitingConfirm = null;
   session.lastPath = payload.path;
+  /* Mirrored onto the session so the status broadcast can carry it to the
+     panel. The panel decides nothing about which box this is; it only shows
+     the helper when the worker says the ringed box is a station box. */
+  session.stationBox = !!payload.stationBox;
   rememberPath(session, payload);
 
   if (session.budgetHit && !session.budgetToldUser) {
@@ -690,6 +709,9 @@ function broadcastStatus(session) {
     payload.maxAiCalls = MAX_AI_CALLS;
     payload.pathLog = (session.pathLog || []).slice(-8);
     payload.flowId = session.flowId || null;
+    /* The panel shows the station helper on this and nothing else. A gate step
+       is never a station box, so a stop is never cluttered by it. */
+    payload.stationBox = !!session.stationBox && !payload.awaitingConfirm;
   }
 
   try {

@@ -79,6 +79,25 @@
 
   <div class="instruction" id="instruction"></div>
 
+  <!-- Shown only when the ringed box is a station box. Knowing which box to
+       fill does not help somebody who cannot spell the station in Latin
+       letters, so Daari resolves the name and shows it to be copied. It never
+       types it: that is the product, not a limitation. -->
+  <div class="station" id="stationBox" hidden>
+    <p class="station-prompt" id="stationPrompt"></p>
+    <div class="station-ask">
+      <input type="text" id="stationInput" aria-label="Say or type your station">
+      <button id="stationFind"></button>
+    </div>
+    <!-- The answer: large, because copying it is the whole job. -->
+    <div class="station-answer" id="stationAnswer" hidden>
+      <p class="station-label" id="stationLabel"></p>
+      <p class="station-name" id="stationName"></p>
+      <p class="station-code" id="stationCode"></p>
+    </div>
+    <p class="station-unknown" id="stationUnknown" hidden></p>
+  </div>
+
   <!-- The confirm gate. Hidden until Daari refuses to point at something
        until the user has looked at the screen. -->
   <button class="confirm" id="confirm">I have checked - continue</button>
@@ -109,6 +128,7 @@
   <script src="config.js"></script>
   <script src="strings.js"></script>
   <script src="strings-guidance.js"></script>
+  <script src="stations.js"></script>
   <script src="tts.js"></script>
   <script src="sidepanel.js"></script>
 </body>
