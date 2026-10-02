@@ -18,7 +18,8 @@
    recipe's own element and its pre-written sentence. With no recipe at all the
    model works alone, and is believed only when it is confident. */
 
-importScripts('config.js', 'strings.js', 'safety.js', 'matching.js');
+importScripts('config.js', 'strings.js', 'strings-guidance.js', 'safety.js',
+              'matching.js');
 
 var SESSION_KEY = 'daariSession';
 
@@ -138,6 +139,62 @@ async function clearSession() {
 async function currentLang() {
   var stored = await chrome.storage.local.get({ lang: 'te' });
   return stored.lang;
+}
+
+/* How much help the user asked for, read fresh for the same reason as the
+   language: switching mode mid-booking takes effect on the very next step.
+
+   Anything that is not exactly 'full' is 'light'. Light is today's tested
+   behaviour, so a missing or corrupted value lands the user somewhere known
+   to work rather than somewhere half-built. */
+async function currentHelpLevel() {
+  var stored = await chrome.storage.local.get({ helpLevel: 'light' });
+  return stored.helpLevel === 'full' ? 'full' : 'light';
+}
+
+/* The pre-written full-mode text for a recipe, or null. */
+function guidanceFor(recipe) {
+  var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.byTask;
+  if (!all || !recipe || !recipe.task) { return null; }
+  return all[recipe.task] || null;
+}
+
+/* The sentence for a step.
+
+   In full mode a pre-written sentence that says WHY replaces the short one.
+   Where no full sentence has been written -- the whole check-pnr recipe, for
+   instance -- this returns the ordinary one, so an unfinished translation
+   behaves exactly like light mode instead of going silent. */
+function stepSentence(recipe, recipeStep, stepIndex, lang, helpLevel) {
+  if (helpLevel === 'full') {
+    var g = guidanceFor(recipe);
+    var full = g && g.stepFull && g.stepFull[stepIndex];
+    if (full && full[lang]) { return self.DAARI_T(full, lang); }
+  }
+  return self.DAARI_T(recipeStep.say, lang);
+}
+
+/* In full mode, the first time this session lands on a page, say what the page
+   is for -- then the instruction, in the same breath.
+
+   Joined into one sentence rather than sent as a second message: the caption
+   in the page and the speech in the panel then cannot get out of order, and
+   nothing in the overlay or the panel had to change to carry it.
+
+   Once per page per session. Somebody who goes back a page does not need to be
+   told again what they are looking at. */
+function withPageIntro(sentence, recipe, recipeStep, session, lang, helpLevel) {
+  if (helpLevel !== 'full' || !recipeStep || !recipeStep.page) { return sentence; }
+
+  var g = guidanceFor(recipe);
+  var intro = g && g.pageIntro && g.pageIntro[recipeStep.page];
+  if (!intro || !intro[lang]) { return sentence; }
+
+  session.introduced = session.introduced || [];
+  if (session.introduced.indexOf(recipeStep.page) !== -1) { return sentence; }
+  session.introduced.push(recipeStep.page);
+
+  return self.DAARI_T(intro, lang) + ' ' + sentence;
 }
 
 async function recipeFor(session) {
@@ -300,6 +357,7 @@ async function decideStep(session, page) {
 
   var recipeStep = recipe ? recipe.steps[session.stepIndex] : null;
   var lang = await currentLang();
+  var helpLevel = await currentHelpLevel();
   var S = self.DAARI_STRINGS;
 
   if (recipe && !recipeStep) {
@@ -377,7 +435,9 @@ async function decideStep(session, page) {
       return payload;
     }
 
-    payload.say = self.DAARI_T(recipeStep.say, lang);
+    payload.say = withPageIntro(
+      stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel),
+      recipe, recipeStep, session, lang, helpLevel);
     payload.path = 'recipe';
     return payload;
   }
@@ -464,14 +524,26 @@ async function decideStep(session, page) {
 
   if (usable && !rejectedHint && (!recipeStep || ai.elementIndex === recipeIndex)) {
     payload.index = ai.elementIndex;
-    payload.say = ai.speech;
+    /* The model's phrasing, EXCEPT in full mode where a sentence has been
+       pre-written for this step. The owner asked for the explanations to be
+       pre-written per step so full mode costs nothing extra and says the same
+       thing every time. The model still chose the element, and the validation
+       gate above still had to agree with the recipe before we got here --
+       only the words are ours. */
+    payload.say = withPageIntro(
+      (helpLevel === 'full' && recipeStep)
+        ? stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel)
+        : ai.speech,
+      recipe, recipeStep, session, lang, helpLevel);
     payload.done_when = ai.done_when || (recipeStep && recipeStep.done_when) || 'clicked';
     payload.path = 'ai';
     payload.confidence = ai.confidence;
 
   } else if (recipeStep && recipeIndex !== -1) {
     payload.index = recipeIndex;
-    payload.say = self.DAARI_T(recipeStep.say, lang);
+    payload.say = withPageIntro(
+      stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel),
+      recipe, recipeStep, session, lang, helpLevel);
     payload.done_when = recipeStep.done_when || 'clicked';
     payload.path = 'fallback';
     payload.why = ai

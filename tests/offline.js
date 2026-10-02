@@ -1368,6 +1368,228 @@ console.log('\n2l. Every recipe step that changes page waits for the page');
   }
 }
 
+console.log('\n2m. FULL mode: what the page is for, and why this step');
+{
+  /* Two guidance levels. Light is what has always happened. Full adds a
+     sentence about the page, once, and replaces each instruction with a
+     pre-written one that says why.
+
+     What is really being guarded here: full mode must never be able to make
+     Daari go QUIET. Every lookup falls back to the short sentence, so an
+     untranslated recipe, or a step nobody wrote text for, behaves like light
+     mode. Silence, for somebody who cannot read the page, is as bad as a wrong
+     instruction. */
+
+  const G = ctx.self.DAARI_GUIDANCE;
+  const BOOK = G.byTask['book-ticket'];
+
+  async function freshFlow(level, langCode) {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = langCode || 'en';
+    if (level) { storage.local.helpLevel = level; } else { delete storage.local.helpLevel; }
+    aiFail = 500;                 // recipe only, so the words are deterministic
+    aiRequests.length = 0;
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+  }
+
+  // ---- light mode is exactly what it always was ------------------------
+  {
+    await freshFlow('light');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('light mode says the short sentence', step.say, 'Type where you are starting from');
+    check('  and does NOT explain the page',
+      step.say.indexOf(BOOK.pageIntro.index.en) >= 0, false);
+  }
+
+  // ---- no stored level at all behaves as light -------------------------
+  {
+    await freshFlow(null);
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('an unset level behaves as light', step.say, 'Type where you are starting from');
+  }
+
+  // ---- full mode: the page sentence, then the why ----------------------
+  {
+    await freshFlow('full');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('full mode says what the page is for',
+      step.say.indexOf(BOOK.pageIntro.index.en), 0);
+    check('  then the instruction with its reason',
+      step.say.indexOf(BOOK.stepFull[0].en) > 0, true);
+    check('  which is longer than the short one',
+      step.say.length > 'Type where you are starting from'.length, true);
+    check('  and it still points at the right box', step.index, 4);
+    check('  and still knows how the step completes', step.done_when, 'field_filled');
+  }
+
+  // ---- the page sentence is said ONCE, not on every step ---------------
+  {
+    await freshFlow('full');
+    const first = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('the first step on a page introduces it',
+      first.say.indexOf(BOOK.pageIntro.index.en), 0);
+
+    const second = await call(Object.assign({ type: 'DAARI_STEP_DONE', forStep: 0 },
+      page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('the next step on the SAME page does not introduce it again',
+      second.say.indexOf(BOOK.pageIntro.index.en) >= 0, false);
+    check('  but still says why', second.say, BOOK.stepFull[1].en);
+  }
+
+  // ---- a different page gets its own sentence --------------------------
+  {
+    await freshFlow('full');
+    const s = storage.session.daariSession;
+    s.stepIndex = 12;                 // the card number step, on the payment page
+    s.confirmedStep = 12;
+    await chrome.storage.session.set({ daariSession: s });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('arriving on the payment page explains that page',
+      step.say.indexOf(BOOK.pageIntro.payment.en), 0);
+    check('  and says the money is what this page is for',
+      step.say.toLowerCase().indexOf('money') > 0, true);
+  }
+
+  // ---- the payment step says what happens next ------------------------
+  {
+    await freshFlow('full');
+    const s = storage.session.daariSession;
+    s.stepIndex = 13;                 // the Pay step
+    s.confirmedStep = 13;             // past the gate, so the step itself is live
+    await chrome.storage.session.set({ daariSession: s });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('the Pay step tells the user to check the amount',
+      step.say.toLowerCase().indexOf('check the amount') >= 0, true);
+    check('  and that the PIN is theirs to type',
+      step.say.indexOf('PIN yourself') > 0, true);
+  }
+
+  // ---- THE SAFETY GATE IS UNCHANGED BY FULL MODE ----------------------
+  {
+    /* Wording is wording. The gate is code. Full mode must not be able to talk
+       its way past the stop before paying. */
+    await freshFlow('full');
+    const s = storage.session.daariSession;
+    s.stepIndex = 13;
+    delete s.confirmedStep;           // NOT confirmed
+    await chrome.storage.session.set({ daariSession: s });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('full mode still stops before paying', step.gate, true);
+    check('  and says the confirm-first words, not the step words',
+      step.say, ctx.self.DAARI_STRINGS.ui.confirmBeforePay.en);
+  }
+
+  // ---- a recipe with no full text falls back, never goes quiet ---------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    storage.local.helpLevel = 'full';
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW',
+      url: 'https://daari-ai.vercel.app/practice/pnr.html',
+      goal: 'check my PNR status', tabId: 1 });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      { url: 'https://daari-ai.vercel.app/practice/pnr.html', title: 'PNR',
+        elements: [{ i: 0, tag: 'input', type: 'text', name: 'PNR number *', filled: false },
+                   { i: 1, tag: 'button', type: 'submit', name: 'Check status', filled: false }] }));
+    check('check-pnr has no full text written', !G.byTask['check-pnr'], true);
+    check('  so full mode uses its short sentence',
+      step.say, 'Type your ten digit PNR number here');
+    check('  and is never empty', step.say.length > 0, true);
+  }
+
+  // ---- full mode in Telugu --------------------------------------------
+  {
+    await freshFlow('full', 'te');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+    check('full mode speaks Telugu when Telugu is chosen',
+      step.say.indexOf(BOOK.pageIntro.index.te), 0);
+    check('  with the Telugu reason',
+      step.say.indexOf(BOOK.stepFull[0].te) > 0, true);
+  }
+
+  // ---- full mode replaces the MODEL's wording, keeps its element -------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    storage.local.helpLevel = 'full';
+    aiFail = null;
+    aiRequests.length = 0;
+    aiReply = { elementIndex: 4, speech: 'A sentence the model wrote',
+                done_when: 'field_filled', stopAndConfirm: false, confidence: 0.9 };
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, SEARCH_ELEMENTS)));
+
+    check('the model still chose the element', step.index, 4);
+    check('  and the answer still counts as the ai path', step.path, 'ai');
+    check('  but full mode uses the written sentence, not the model phrasing',
+      step.say.indexOf('A sentence the model wrote') >= 0, false);
+    check('  which is the pre-written one',
+      step.say.indexOf(BOOK.stepFull[0].en) > 0, true);
+
+    /* The one thing full mode must never do: send more about the page. */
+    const sentUp = aiRequests[aiRequests.length - 1];
+    check('  and nothing extra was sent to the model',
+      Object.keys(sentUp.elements[0]).sort().join(','), 'filled,i,name,tag,type');
+    check('  no help level is sent either, because the words are chosen here',
+      'helpLevel' in sentUp, false);
+  }
+
+  // ---- the written text is complete, and carries no values -------------
+  {
+    const recipe = JSON.parse(fs.readFileSync(
+      path.join(EXT, 'recipes', 'practice-book-ticket.json'), 'utf8'));
+
+    let missingStep = [];
+    recipe.steps.forEach((_, i) => {
+      const entry = BOOK.stepFull[i];
+      if (!entry) { missingStep.push('step ' + i); return; }
+      ['te', 'hi', 'en'].forEach((code) => {
+        if (!entry[code] || !String(entry[code]).trim()) { missingStep.push(i + '.' + code); }
+      });
+    });
+    check('every book-ticket step has full text in all three languages',
+      missingStep.join(','), '');
+
+    let missingPage = [];
+    recipe.steps.forEach((s) => {
+      if (!s.page) { return; }
+      const entry = BOOK.pageIntro[s.page];
+      if (!entry) { missingPage.push(s.page); return; }
+      ['te', 'hi', 'en'].forEach((code) => {
+        if (!entry[code] || !String(entry[code]).trim()) { missingPage.push(s.page + '.' + code); }
+      });
+    });
+    check('every page the recipe visits is explained in all three languages',
+      Array.from(new Set(missingPage)).join(','), '');
+
+    /* Rule 2, applied to the new text: these sentences are written once and
+       said to everybody, so none of them may contain a slot for something the
+       user typed. No placeholder means nothing can ever be filled in. */
+    const SLOTS = ['{', '${', '%s'];
+    let withSlots = [];
+    [BOOK.stepFull, BOOK.pageIntro].forEach((group) => {
+      Object.keys(group).forEach((key) => {
+        ['te', 'hi', 'en'].forEach((code) => {
+          const text = String(group[key][code] || '');
+          if (SLOTS.some((slot) => text.indexOf(slot) !== -1)) {
+            withSlots.push(key + '.' + code);
+          }
+        });
+      });
+    });
+    check('no full-mode sentence has a slot a typed value could land in',
+      withSlots.join(','), '');
+  }
+
+  // clean up, so later sections see the state they expect
+  delete storage.local.helpLevel;
+  aiFail = null;
+  aiReply = null;
+}
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);
