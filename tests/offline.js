@@ -1496,8 +1496,8 @@ console.log('\n2m. FULL mode: what the page is for, and why this step');
         elements: [{ i: 0, tag: 'input', type: 'text', name: 'PNR number *', filled: false },
                    { i: 1, tag: 'button', type: 'submit', name: 'Check status', filled: false }] }));
     check('check-pnr has no full text written', !G.byTask['check-pnr'], true);
-    check('  so full mode uses its short sentence',
-      step.say, 'Type your ten digit PNR number here');
+    check('  so full mode starts from its short sentence',
+      step.say.indexOf('Type your ten digit PNR number here'), 0);
     check('  and is never empty', step.say.length > 0, true);
   }
 
@@ -1818,6 +1818,169 @@ console.log('\n2n. The station helper: what they said, spelled how the site want
       unreachable.join(' | '), '');
   }
 
+  aiFail = null;
+  aiReply = null;
+}
+console.log('\n2o. Words the website never explains, explained once');
+{
+  /* PNR, OTP, Tatkal, quota, berth, UPI. Said once per session, after the
+     instruction, full mode only.
+
+     ONCE is the whole design, and it is the thing most worth a test: a
+     definition that repeats on every step is a definition nobody listens to,
+     and it buries the instruction underneath it. */
+
+  const TERMS = ctx.self.DAARI_GUIDANCE.terms;
+
+  async function flow(level, langCode, url, goal) {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = langCode || 'en';
+    if (level) { storage.local.helpLevel = level; } else { delete storage.local.helpLevel; }
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW',
+      url: url || START_URL, goal: goal || 'book a train ticket', tabId: 1 });
+  }
+
+  const PNR_PAGE = { url: 'https://daari-ai.vercel.app/practice/pnr.html', title: 'PNR',
+    elements: [{ i: 0, tag: 'input', type: 'text', name: 'PNR number *', filled: false },
+               { i: 1, tag: 'button', type: 'submit', name: 'Check status', filled: false }] };
+
+  // ---- the first mention explains; the second does not -----------------
+  {
+    await flow('full', 'en', PNR_PAGE.url, 'check my PNR status');
+    const first = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('the first step naming PNR explains it',
+      first.say.indexOf(TERMS.pnr.say.en) > 0, true);
+    check('  with the instruction FIRST, not the lesson',
+      first.say.indexOf('Type your ten digit PNR number here'), 0);
+
+    const second = await call(Object.assign({ type: 'DAARI_STEP_DONE', forStep: 1 }, PNR_PAGE));
+    check('the next step naming PNR does NOT explain it again',
+      second.say.indexOf(TERMS.pnr.say.en) >= 0, false);
+    check('  but still says what to do', second.say.length > 0, true);
+  }
+
+  // ---- light mode is never taught anything -----------------------------
+  {
+    await flow('light', 'en', PNR_PAGE.url, 'check my PNR status');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('light mode gets no explanation',
+      step.say.indexOf(TERMS.pnr.say.en) >= 0, false);
+    check('  just the step', step.say, 'Type your ten digit PNR number here');
+  }
+  {
+    await flow(null, 'en', PNR_PAGE.url, 'check my PNR status');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('an unset level gets no explanation either',
+      step.say.indexOf(TERMS.pnr.say.en) >= 0, false);
+  }
+
+  // ---- OTP, on the booking flow ----------------------------------------
+  {
+    await flow('full', 'en');
+    const s = storage.session.daariSession;
+    s.stepIndex = 9;                      // Send OTP
+    s.confirmedStep = 9;
+    await chrome.storage.session.set({ daariSession: s });
+    const PASSENGER = [
+      { i: 0, tag: 'input', type: 'text', name: 'Passenger name *', filled: true },
+      { i: 1, tag: 'button', type: 'submit', name: 'Send OTP', filled: false }
+    ];
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/passenger.html', PASSENGER)));
+    check('the Send OTP step explains what an OTP is',
+      step.say.indexOf(TERMS.otp.say.en) > 0, true);
+  }
+
+  // ---- a term is explained in the chosen language ----------------------
+  {
+    await flow('full', 'te', PNR_PAGE.url, 'check my PNR status');
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('the explanation comes in Telugu',
+      step.say.indexOf(TERMS.pnr.say.te) > 0, true);
+    check('  and not in English',
+      step.say.indexOf(TERMS.pnr.say.en) >= 0, false);
+  }
+
+  // ---- a new session explains it again ---------------------------------
+  {
+    await flow('full', 'en', PNR_PAGE.url, 'check my PNR status');
+    const once = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('explained in the first session', once.say.indexOf(TERMS.pnr.say.en) > 0, true);
+
+    await flow('full', 'en', PNR_PAGE.url, 'check my PNR status');
+    const again = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, PNR_PAGE));
+    check('a brand new session explains it again, for a new person',
+      again.say.indexOf(TERMS.pnr.say.en) > 0, true);
+  }
+
+  // ---- A STOP IS NOT THE MOMENT FOR A VOCABULARY LESSON ---------------
+  {
+    /* The confirm gate says one thing and waits. Appending a definition to it
+       would bury the only sentence that matters at the only moment that
+       matters. */
+    await flow('full', 'en');
+    const s = storage.session.daariSession;
+    s.stepIndex = 13;                     // Pay, NOT confirmed
+    delete s.confirmedStep;
+    await chrome.storage.session.set({ daariSession: s });
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page('https://daari-ai.vercel.app/practice/payment.html', PAYMENT_ELEMENTS)));
+    check('the stop fires', step.gate, true);
+    check('  and says only the confirm words',
+      step.say, ctx.self.DAARI_STRINGS.ui.confirmBeforePay.en);
+  }
+
+  // ---- the matching does not go off on the wrong word ------------------
+  {
+    /* "otp" must not be found inside another word, or every step would come
+       with a definition. Checked through the worker's own matcher. */
+    await flow('full', 'en');
+    const ODD = [
+      { i: 0, tag: 'input', type: 'text', name: 'From station *', filled: false },
+      { i: 1, tag: 'input', type: 'text', name: 'To station *', filled: false },
+      { i: 2, tag: 'select', type: '', name: 'Class', filled: true },
+      { i: 3, tag: 'button', type: 'submit', name: 'Search Trains', filled: false }
+    ];
+    const step = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(SEARCH_URL, ODD)));
+    let taught = Object.keys(TERMS).filter((k) => step.say.indexOf(TERMS[k].say.en) >= 0);
+    check('a step about stations teaches nothing', taught.join(','), '');
+  }
+
+  // ---- every term is complete, and none of them is a sentence about the
+  //      user's own data ------------------------------------------------
+  {
+    const WANTED = ['pnr', 'tatkal', 'quota', 'berth', 'upi', 'otp'];
+    let missing = WANTED.filter((key) => !TERMS[key]);
+    check('all six words asked for are written', missing.join(','), '');
+
+    let bad = [];
+    Object.keys(TERMS).forEach((key) => {
+      if (!(TERMS[key].match || []).length) { bad.push(key + ': nothing to match on'); }
+      ['te', 'hi', 'en'].forEach((code) => {
+        const text = TERMS[key].say && TERMS[key].say[code];
+        if (!text || !String(text).trim()) { bad.push(key + '.' + code + ': missing'); }
+        /* One line, said out loud. Two sentences is already too much. */
+        if (text && String(text).length > 110) { bad.push(key + '.' + code + ': too long to say'); }
+        /* Rule 2: these are written once and said to everybody, so no slot a
+           typed value could land in. */
+        if (text && (String(text).indexOf('{') !== -1 ||
+                     String(text).indexOf('%s') !== -1)) {
+          bad.push(key + '.' + code + ': has a slot in it');
+        }
+      });
+    });
+    check('every word is explained in all three languages, in one short line',
+      bad.join(' | '), '');
+
+    /* Each term must actually be findable in its own explanation's language --
+       otherwise the word could appear and never be matched. */
+    let unmatched = WANTED.filter((key) =>
+      !(TERMS[key].match || []).some((m) => m && String(m).length > 1));
+    check('every word has something matchable to look for', unmatched.join(','), '');
+  }
+
+  delete storage.local.helpLevel;
   aiFail = null;
   aiReply = null;
 }

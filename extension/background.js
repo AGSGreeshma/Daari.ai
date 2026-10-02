@@ -174,6 +174,70 @@ function stepSentence(recipe, recipeStep, stepIndex, lang, helpLevel) {
   return self.DAARI_T(recipeStep.say, lang);
 }
 
+/* Does this sentence use a word the website never explains?
+
+   Matched against what Daari is ABOUT TO SAY -- never against the page, and
+   never against anything the user typed. A Latin term needs a boundary either
+   side so "otp" cannot be found inside another word; the Telugu and Hindi
+   spellings are matched as they stand, because those scripts have no word
+   boundary to anchor to.
+
+   Returns the term keys found, in the order they are declared, so two new
+   words in one sentence come out in a stable order rather than whatever order
+   the sentence happened to use. */
+function termsIn(sentence) {
+  var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.terms;
+  if (!all || !sentence) { return []; }
+
+  var text = String(sentence);
+  var lower = text.toLowerCase();
+
+  return Object.keys(all).filter(function (key) {
+    return (all[key].match || []).some(function (needle) {
+      if (/^[a-z]+$/i.test(needle)) {
+        /* A Latin word: require a non-letter on both sides. */
+        var at = lower.indexOf(needle.toLowerCase());
+        while (at !== -1) {
+          var before = at === 0 ? '' : lower.charAt(at - 1);
+          var after = lower.charAt(at + needle.length);
+          if (!/[a-z]/.test(before) && !/[a-z]/.test(after)) { return true; }
+          at = lower.indexOf(needle.toLowerCase(), at + 1);
+        }
+        return false;
+      }
+      return text.indexOf(needle) !== -1;
+    });
+  });
+}
+
+/* Explain any unexplained word, once per session, after the instruction.
+
+   The instruction leads and the definition follows: somebody who already knows
+   what a PNR is has still heard what to do before the explaining starts.
+
+   Full mode only. In light mode the user reads English and did not ask to be
+   taught anything. */
+function explainTerms(sentence, session, lang, helpLevel) {
+  if (helpLevel !== 'full' || !sentence) { return sentence; }
+
+  var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.terms;
+  if (!all) { return sentence; }
+
+  session.termsExplained = session.termsExplained || [];
+
+  var additions = [];
+  termsIn(sentence).forEach(function (key) {
+    if (session.termsExplained.indexOf(key) !== -1) { return; }
+    var text = all[key].say && all[key].say[lang];
+    if (!text) { return; }          /* untranslated: say nothing, never a gap */
+    session.termsExplained.push(key);
+    additions.push(self.DAARI_T(all[key].say, lang));
+  });
+
+  if (!additions.length) { return sentence; }
+  return sentence + ' ' + additions.join(' ');
+}
+
 /* In full mode, the first time this session lands on a page, say what the page
    is for -- then the instruction, in the same breath.
 
@@ -442,9 +506,9 @@ async function decideStep(session, page) {
       return payload;
     }
 
-    payload.say = withPageIntro(
+    payload.say = explainTerms(withPageIntro(
       stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel),
-      recipe, recipeStep, session, lang, helpLevel);
+      recipe, recipeStep, session, lang, helpLevel), session, lang, helpLevel);
     payload.path = 'recipe';
     return payload;
   }
@@ -601,6 +665,13 @@ async function decideStep(session, page) {
      panel. The panel decides nothing about which box this is; it only shows
      the helper when the worker says the ringed box is a station box. */
   session.stationBox = !!payload.stationBox;
+
+  /* The last thing done to the sentence, so a word is explained whether it
+     came from the recipe, from full mode, or from the model. The gate and the
+     "I am not sure" voice return before this point and are left alone: a stop
+     is not the moment for a vocabulary lesson. */
+  payload.say = explainTerms(payload.say, session, lang, helpLevel);
+
   rememberPath(session, payload);
 
   if (session.budgetHit && !session.budgetToldUser) {

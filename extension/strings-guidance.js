@@ -79,6 +79,77 @@ self.DAARI_GUIDANCE = {
   },
 
   /* ------------------------------------------------------------------
+     4. WORDS THE WEBSITE USES WITHOUT EXPLAINING THEM
+
+     Said once per session, the first time the word turns up in something Daari
+     is about to say. Full mode only.
+
+     Once is the whole design. A definition that repeats on every step is a
+     definition nobody listens to, and it buries the instruction underneath it.
+     After the first time, the word is just a word.
+
+     "match" is what to look for, in every script the word appears in. It is
+     matched against what Daari is ABOUT TO SAY -- never against the page, and
+     never against anything the user typed.
+     ------------------------------------------------------------------ */
+  terms: {
+
+    pnr: {
+      match: ['pnr', 'పిఎన్ఆర్', 'पीएनआर'],
+      say: {
+        en: 'PNR is the ten digit number for your booking. Keep it.',
+        hi: 'PNR आपकी बुकिंग का दस अंकों का नंबर है। इसे रखिए।',
+        te: 'PNR అంటే మీ బుకింగ్ పది అంకెల నంబర్. దాన్ని దగ్గర పెట్టుకోండి.'
+      }
+    },
+
+    otp: {
+      match: ['otp', 'ఓటీపీ', 'ओटीपी'],
+      say: {
+        en: 'OTP is a short code, to check the phone number is yours.',
+        hi: 'OTP एक छोटा कोड है, यह जाँचने के लिए कि नंबर आपका है।',
+        te: 'OTP అంటే చిన్న కోడ్. ఫోన్ నంబర్ మీదేనా అని చూడటానికి.'
+      }
+    },
+
+    tatkal: {
+      match: ['tatkal', 'తత్కాల్', 'तत्काल'],
+      say: {
+        en: 'Tatkal is for booking at the last minute. It costs more.',
+        hi: 'तत्काल आख़िरी समय की बुकिंग के लिए है। इसमें ज़्यादा पैसे लगते हैं।',
+        te: 'తత్కాల్ అంటే చివరి నిమిషంలో బుక్ చేసుకోవడం. దీనికి డబ్బు ఎక్కువ.'
+      }
+    },
+
+    quota: {
+      match: ['quota', 'కోటా', 'कोटा'],
+      say: {
+        en: 'Quota means which group of seats you are asking from.',
+        hi: 'कोटा का मतलब है, आप सीटों के किस हिस्से से माँग रहे हैं।',
+        te: 'కోటా అంటే మీరు ఏ రకం సీట్ల నుండి అడుగుతున్నారో అని.'
+      }
+    },
+
+    berth: {
+      match: ['berth', 'బెర్త్', 'बर्थ'],
+      say: {
+        en: 'A berth is the bed you sleep on in the train.',
+        hi: 'बर्थ वह बिस्तर है जिस पर आप ट्रेन में सोते हैं।',
+        te: 'బెర్త్ అంటే ట్రైన్‌లో మీరు పడుకునే బెడ్.'
+      }
+    },
+
+    upi: {
+      match: ['upi', 'యూపీఐ', 'यूपीआई'],
+      say: {
+        en: 'UPI pays straight from your bank, using an app on your phone.',
+        hi: 'UPI आपके बैंक से सीधे पैसे देता है, फ़ोन के ऐप से।',
+        te: 'UPI మీ బ్యాంక్ నుండే నేరుగా డబ్బు కడుతుంది, ఫోన్ యాప్‌తో.'
+      }
+    }
+  },
+
+  /* ------------------------------------------------------------------
      3. THE STATION HELPER
 
      Shown when the ringed box is a station box. The user says the name in
