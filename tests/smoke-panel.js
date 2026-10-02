@@ -22,11 +22,30 @@ const vm = require('vm');
 
 const EXT = path.join(__dirname, '..', 'extension');
 
+/* Which elements the real markup starts hidden.
+ *
+ * Read out of sidepanel.html rather than listed here, because a list here
+ * would be a second copy of the truth: delete hidden= from the markup and the
+ * test would keep passing while the panel showed onboarding to everybody.
+ */
+function hiddenAtStart() {
+  const html = fs.readFileSync(path.join(EXT, 'sidepanel.html'), 'utf8');
+  const ids = new Set();
+  (html.match(/<[^>]+>/g) || []).forEach((tag) => {
+    const id = tag.match(/\sid="([^"]+)"/);
+    if (id && /\shidden(\s|>|=)/.test(tag)) { ids.add(id[1]); }
+  });
+  return ids;
+}
+const STARTS_HIDDEN = hiddenAtStart();
+
 function makeElement(id) {
   const listeners = {};
   const el = {
     id: id,
     tagName: 'DIV',
+    /* The real panel gets this from the markup; so does the fake. */
+    hidden: STARTS_HIDDEN.has(id),
     value: '',
     textContent: '',
     innerHTML: '',
@@ -46,6 +65,15 @@ function makeElement(id) {
     getAttribute: (k) => (k in el._attrs ? el._attrs[k] : null),
     hasAttribute: (k) => k in el._attrs,
     querySelectorAll: () => el.children.filter((c) => c && c.className === 'lang'),
+    /* The help-level buttons hold their label and hint in child spans and
+       reach them by selector. One stub element per selector, remembered, so
+       two reads of the same selector are the same element -- otherwise a test
+       could never see what was written into it. */
+    querySelector: (sel) => {
+      el._q = el._q || {};
+      if (!el._q[sel]) { el._q[sel] = makeElement(id + ' ' + sel); }
+      return el._q[sel];
+    },
     focus: () => {},
     getBoundingClientRect: () => ({ width: 100, height: 20, top: 0, left: 0 }),
     // test helper
@@ -67,6 +95,10 @@ function loadPanel(options) {
   const toTab = [];         /* chrome.tabs.sendMessage */
   const created = [];       /* chrome.tabs.create */
   const stored = { lang: opts.lang || 'en' };
+  /* Onboarding state. A test that says nothing gets a panel that has already
+     been set up, because that is the state the panel spends its life in. */
+  if ('helpLevel' in opts) { stored.helpLevel = opts.helpLevel; }
+  stored.seenOnboarding = ('seenOnboarding' in opts) ? opts.seenOnboarding : true;
   const timers = [];
 
   const document = {
@@ -162,7 +194,7 @@ function loadPanel(options) {
   vm.createContext(sandbox);
 
   /* The real files, in the order sidepanel.html loads them. */
-  ['config.js', 'strings.js', 'tts.js', 'sidepanel.js'].forEach((file) => {
+  ['config.js', 'strings.js', 'strings-guidance.js', 'tts.js', 'sidepanel.js'].forEach((file) => {
     vm.runInContext(fs.readFileSync(path.join(EXT, file), 'utf8'), sandbox, { filename: file });
   });
 

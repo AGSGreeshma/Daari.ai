@@ -18,10 +18,19 @@
 
   var T = DAARI_T;
   var S = DAARI_STRINGS;
+  var G = DAARI_GUIDANCE;
 
   /* Telugu is the default, because Daari is for Telugu speakers first.
      Defaulting to English would quietly re-centre the product on English. */
   var lang = 'te';
+
+  /* 'light' = today's behaviour: point, say the step, nothing more.
+     'full'  = also say what the page is for and why this step exists.
+
+     'light' is the default for one reason only: it is the behaviour that is
+     already tested and working. A missing or unreadable stored value must
+     never land somebody in a half-built mode. */
+  var helpLevel = 'light';
 
   var recognition = null;
   var voices = [];
@@ -54,7 +63,18 @@
     confirmSend: document.getElementById('confirmSend'),
     confirmAgain: document.getElementById('confirmAgain'),
     manualDone: document.getElementById('manualDone'),
-    manualBack: document.getElementById('manualBack')
+    manualBack: document.getElementById('manualBack'),
+
+    /* First-run onboarding */
+    onboard: document.getElementById('onboard'),
+    onboardLangPrompt: document.getElementById('onboardLangPrompt'),
+    onboardLangs: document.getElementById('onboardLangs'),
+    onboardHelp: document.getElementById('onboardHelp'),
+    onboardHelpTitle: document.getElementById('onboardHelpTitle'),
+    onboardNote: document.getElementById('onboardNote'),
+    helpLight: document.getElementById('helpLight'),
+    helpFull: document.getElementById('helpFull'),
+    changeSetup: document.getElementById('changeSetup')
   };
 
   /* The recipe "Start demo" forces, for when you want the booking walk without
@@ -109,6 +129,20 @@
       button.setAttribute('lang', entry.code);
       button.addEventListener('click', function () { setLanguage(entry.code); });
       el.langs.appendChild(button);
+
+      /* The same three languages again on the onboarding cover. Built from the
+         same list, so a fourth language would appear in both places. */
+      var first = document.createElement('button');
+      first.className = 'lang';
+      first.textContent = entry.label;
+      first.dataset.code = entry.code;
+      first.setAttribute('lang', entry.code);
+      first.addEventListener('click', function () {
+        setLanguage(entry.code);
+        /* Only now is the help question readable, so only now is it shown. */
+        el.onboardHelp.hidden = false;
+      });
+      el.onboardLangs.appendChild(first);
     });
   }
 
@@ -129,6 +163,32 @@
 
     applyLanguage();
     describeVoices();
+  }
+
+  /* =================================================================
+     How much help -- the second onboarding question
+
+     Stored in chrome.storage.local next to the language, and read from there
+     by the worker. The panel never messages the level anywhere: one writer,
+     one reader, nothing to get out of step.
+     ================================================================= */
+
+  function setHelpLevel(level) {
+    helpLevel = (level === 'full') ? 'full' : 'light';
+    chrome.storage.local.set({ helpLevel: helpLevel });
+    applyLanguage();
+  }
+
+  function showOnboarding() {
+    el.onboard.hidden = false;
+    /* Reopened from the main panel, both questions are already answerable, so
+       the help question is shown straight away rather than after a tap. */
+    el.onboardHelp.hidden = false;
+  }
+
+  function finishOnboarding() {
+    el.onboard.hidden = true;
+    chrome.storage.local.set({ seenOnboarding: true });
   }
 
   /* Put every visible word into the chosen language. */
@@ -158,7 +218,38 @@
     el.startDemo.textContent = T(S.ui.startDemo, lang);
     el.confirm.textContent = T(S.ui.iHaveChecked, lang);
     el.stopGuidance.textContent = T(S.ui.stopGuidance, lang);
+
+    /* ---- onboarding, and the help level ---- */
+    el.onboardLangPrompt.textContent = G.onboarding.langPrompt;
+    el.onboardHelpTitle.textContent = T(G.onboarding.helpTitle, lang);
+    el.onboardNote.textContent = T(G.onboarding.canChange, lang);
+
+    paintHelpButton(el.helpLight, G.onboarding.lightLabel, G.onboarding.lightHint,
+      helpLevel === 'light');
+    paintHelpButton(el.helpFull, G.onboarding.fullLabel, G.onboarding.fullHint,
+      helpLevel === 'full');
+
+    /* The reopen button names the mode, so the panel always says which one you
+       are in without having to open anything. */
+    el.changeSetup.textContent = T(G.onboarding.change, lang) + '  ·  ' +
+      T(helpLevel === 'full' ? G.onboarding.fullLabel : G.onboarding.lightLabel, lang);
+    el.changeSetup.setAttribute('lang', lang);
+
+    var onboardButtons = el.onboardLangs.querySelectorAll('.lang');
+    for (var j = 0; j < onboardButtons.length; j++) {
+      onboardButtons[j].className = 'lang' +
+        (onboardButtons[j].dataset.code === lang ? ' on' : '');
+    }
+
     document.documentElement.setAttribute('lang', lang);
+  }
+
+  /* One help-level button: big label, quieter reason underneath. */
+  function paintHelpButton(button, label, hint, isOn) {
+    button.className = 'help-level' + (isOn ? ' on' : '');
+    button.setAttribute('lang', lang);
+    button.querySelector('.hl-label').textContent = T(label, lang);
+    button.querySelector('.hl-hint').textContent = T(hint, lang);
   }
 
   /* =================================================================
@@ -796,6 +887,18 @@
 
   el.stopSpeak.addEventListener('click', silence);
 
+  /* Onboarding. Picking a help level is the last answer needed, so it also
+     closes the cover -- no extra "Done" button to find. */
+  el.helpLight.addEventListener('click', function () {
+    setHelpLevel('light');
+    finishOnboarding();
+  });
+  el.helpFull.addEventListener('click', function () {
+    setHelpLevel('full');
+    finishOnboarding();
+  });
+  el.changeSetup.addEventListener('click', showOnboarding);
+
   /* The manual way in, for when you want the booking walk without speaking.
      Forces the recipe rather than matching a goal. */
   el.startDemo.addEventListener('click', function () {
@@ -832,8 +935,15 @@
     window.speechSynthesis.onvoiceschanged = describeVoices;
   }
 
-  chrome.storage.local.get({ lang: 'te' }).then(function (saved) {
+  chrome.storage.local.get({ lang: 'te', helpLevel: 'light', seenOnboarding: false })
+    .then(function (saved) {
     lang = saved.lang;
+    helpLevel = (saved.helpLevel === 'full') ? 'full' : 'light';
+
+    /* Only on the very first open. After that the panel is the panel, and
+       onboarding is behind the "Change language or help" button. */
+    if (!saved.seenOnboarding) { el.onboard.hidden = false; }
+
     applyLanguage();
     describeVoices();
     /* A panel opened halfway through a booking should show the right step at

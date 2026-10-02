@@ -417,3 +417,66 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0 16px; }
 @media (prefers-reduced-motion: reduce) {
   .mic.listening { animation: none; }
 }
+
+/* ---------- first run: language, then how much help ----------
+
+   A full cover rather than a section, so that on the very first open there is
+   exactly one question on screen. Someone who has never used an extension
+   before should not have to work out which part to read first. */
+.onboard {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 18px 14px 28px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+.onboard[hidden] { display: none; }
+
+.onboard-q {
+  margin: 20px 0 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--ink);
+}
+
+/* Stacked, not side by side: the hint under each one needs room to be read. */
+.help-level {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 15px;
+  text-align: left;
+  font-family: inherit;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.help-level:hover { border-color: #c9c3b6; }
+.help-level.on {
+  border-color: var(--orange);
+  background: #fff4e8;
+  box-shadow: inset 0 0 0 1px var(--orange);
+}
+.hl-label { display: block; font-size: 18px; font-weight: bold; }
+.hl-hint  { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); }
+
+.onboard-note { margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+
+/* The way back into onboarding. Quiet, but always there. */
+.change-setup {
+  display: block;
+  width: 100%;
+  margin: -8px 0 16px;
+  padding: 9px;
+  font-size: 13.5px;
+  font-family: inherit;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.change-setup:hover { border-color: #c9c3b6; color: var(--ink); }

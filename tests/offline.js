@@ -285,6 +285,129 @@ console.log('\n0b. The side panel buttons actually do something');
   }
 }
 
+console.log('\n0c. Onboarding: language, then how much help');
+{
+  /* Two questions, asked once, changeable forever after. The thing being
+     guarded here is that LIGHT is what you get when anything goes wrong --
+     light mode is today's tested behaviour, so an unreadable stored value or a
+     half-finished onboarding can never leave somebody in a mode that was never
+     exercised. */
+  const { loadPanel } = require(path.join(ROOT, 'tests', 'smoke-panel.js'));
+
+  // ---- the very first open shows it ------------------------------------
+  {
+    const panel = loadPanel({ seenOnboarding: false });
+    await new Promise((r) => setImmediate(r));
+    check('a first-time panel shows onboarding', panel.el.onboard.hidden, false);
+    check('  with the help question hidden until a language is picked',
+      panel.el.onboardHelp.hidden, true);
+    check('  and the language question in all three scripts at once',
+      /భాష/.test(panel.el.onboardLangPrompt.textContent) &&
+      /भाषा/.test(panel.el.onboardLangPrompt.textContent) &&
+      /Language/.test(panel.el.onboardLangPrompt.textContent), true);
+    check('  and three language buttons', panel.el.onboardLangs.children.length, 3);
+  }
+
+  // ---- a returning panel does NOT show it ------------------------------
+  {
+    const panel = loadPanel({ seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    check('a panel that has been set up does not ask again',
+      panel.el.onboard.hidden, true);
+  }
+
+  // ---- picking a language reveals the help question, in that language --
+  {
+    const panel = loadPanel({ seenOnboarding: false, lang: 'en' });
+    await new Promise((r) => setImmediate(r));
+    const telugu = panel.el.onboardLangs.children.filter((c) => c.dataset.code === 'te')[0];
+    check('the onboarding cover has a Telugu button', !!telugu, true);
+    telugu._fire('click');
+    check('picking it saves the language', panel.stored.lang, 'te');
+    check('  and reveals the help question', panel.el.onboardHelp.hidden, false);
+    check('  asked in Telugu', panel.el.onboardHelpTitle.textContent,
+      panel.sandbox.DAARI_GUIDANCE.onboarding.helpTitle.te);
+    check('  and onboarding is still open, because nothing is answered yet',
+      panel.el.onboard.hidden, false);
+  }
+
+  // ---- choosing a level saves it AND closes the cover ------------------
+  {
+    const panel = loadPanel({ seenOnboarding: false });
+    await new Promise((r) => setImmediate(r));
+    panel.el.helpFull._fire('click');
+    check('Guide me fully saves full', panel.stored.helpLevel, 'full');
+    check('  and closes onboarding', panel.el.onboard.hidden, true);
+    check('  and remembers it was seen, so it is never asked twice',
+      panel.stored.seenOnboarding, true);
+  }
+  {
+    const panel = loadPanel({ seenOnboarding: false });
+    await new Promise((r) => setImmediate(r));
+    panel.el.helpLight._fire('click');
+    check('Just show me where saves light', panel.stored.helpLevel, 'light');
+    check('  and closes onboarding', panel.el.onboard.hidden, true);
+  }
+
+  // ---- it is never a one-way door --------------------------------------
+  {
+    const panel = loadPanel({ seenOnboarding: true, helpLevel: 'full' });
+    await new Promise((r) => setImmediate(r));
+    check('there is a way back in', panel.el.changeSetup._listens('click'), true);
+    panel.el.changeSetup._fire('click');
+    check('it reopens onboarding', panel.el.onboard.hidden, false);
+    check('  with the help question already showing, since both are answerable',
+      panel.el.onboardHelp.hidden, false);
+
+    panel.el.helpLight._fire('click');
+    check('and the level can be changed back', panel.stored.helpLevel, 'light');
+    check('  closing it again', panel.el.onboard.hidden, true);
+  }
+
+  // ---- the panel always says which mode you are in ---------------------
+  {
+    const panel = loadPanel({ seenOnboarding: true, helpLevel: 'full', lang: 'te' });
+    await new Promise((r) => setImmediate(r));
+    check('the reopen button names the mode you are in',
+      panel.el.changeSetup.textContent.indexOf(
+        panel.sandbox.DAARI_GUIDANCE.onboarding.fullLabel.te) >= 0, true);
+    panel.el.helpLight._fire('click');
+    check('  and renames itself when the mode changes',
+      panel.el.changeSetup.textContent.indexOf(
+        panel.sandbox.DAARI_GUIDANCE.onboarding.lightLabel.te) >= 0, true);
+  }
+
+  // ---- LIGHT is what you get when anything is wrong --------------------
+  {
+    const panel = loadPanel({ seenOnboarding: true });
+    await new Promise((r) => setImmediate(r));
+    check('no stored level means light, not full', panel.el.helpLight.className,
+      'help-level on');
+    check('  and full is not marked on', panel.el.helpFull.className, 'help-level');
+  }
+  {
+    const panel = loadPanel({ seenOnboarding: true, helpLevel: 'banana' });
+    await new Promise((r) => setImmediate(r));
+    check('an unreadable stored level falls back to light',
+      panel.el.helpLight.className, 'help-level on');
+  }
+
+  // ---- every new string exists in all three languages ------------------
+  {
+    const G = loadPanel().sandbox.DAARI_GUIDANCE;
+    let missing = [];
+    Object.keys(G.onboarding).forEach((key) => {
+      const entry = G.onboarding[key];
+      if (typeof entry === 'string') { return; }   /* langPrompt is trilingual */
+      ['te', 'hi', 'en'].forEach((code) => {
+        if (!entry[code] || !String(entry[code]).trim()) {
+          missing.push(key + '.' + code);
+        }
+      });
+    });
+    check('every onboarding string exists in te, hi and en', missing.join(','), '');
+  }
+}
 console.log('\n1. Recipes load and are well formed');
 {
   for (const file of ['practice-book-ticket', 'practice-check-pnr']) {

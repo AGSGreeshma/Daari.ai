@@ -7,6 +7,29 @@
 </head>
 <body>
 
+  <!-- First run: language, then how much help. Covers the panel completely so
+       there is exactly one thing to look at. It is an overlay rather than a
+       rearrangement of the markup below, so nothing already working moves. -->
+  <div class="onboard" id="onboard" hidden>
+    <h1>Daari</h1>
+    <p class="tagline">I show you the path. You walk it.</p>
+
+    <p class="onboard-q" id="onboardLangPrompt"></p>
+    <div class="langs" id="onboardLangs"></div>
+
+    <!-- Revealed once a language is picked, so the question is readable. -->
+    <div id="onboardHelp" hidden>
+      <p class="onboard-q" id="onboardHelpTitle"></p>
+      <button class="help-level" id="helpLight">
+        <span class="hl-label"></span><span class="hl-hint"></span>
+      </button>
+      <button class="help-level" id="helpFull">
+        <span class="hl-label"></span><span class="hl-hint"></span>
+      </button>
+      <p class="onboard-note" id="onboardNote"></p>
+    </div>
+  </div>
+
   <h1>Daari</h1>
   <p class="tagline">I show you the path. You walk it.</p>
 
@@ -15,6 +38,10 @@
     <!-- Buttons are built by sidepanel.js from strings.js, so the list of
          languages lives in exactly one place. -->
   </div>
+
+  <!-- Reopens onboarding. The help level is shown on it, so the user can
+       always see which mode they are in. -->
+  <button class="change-setup" id="changeSetup"></button>
 
   <button class="mic" id="mic">Speak your goal</button>
   <p class="mic-hint" id="micHint"></p>
@@ -81,6 +108,7 @@
   <!-- config.js and strings.js first: the others read from them. -->
   <script src="config.js"></script>
   <script src="strings.js"></script>
+  <script src="strings-guidance.js"></script>
   <script src="tts.js"></script>
   <script src="sidepanel.js"></script>
 </body>
