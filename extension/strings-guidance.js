@@ -79,6 +79,68 @@ self.DAARI_GUIDANCE = {
   },
 
   /* ------------------------------------------------------------------
+     5. WHAT THE CHOICES IN A DROPDOWN ACTUALLY MEAN
+
+     Said after the instruction, full mode only. A dropdown is the worst thing
+     on a form for somebody who cannot read it: the labels are abbreviations
+     ("SL", "3A"), and choosing wrong costs money or a sleepless night.
+
+     Keyed by WHAT THE STEP IS ABOUT, not by step number, and matched against
+     the step's own labels. Two reasons: the book-ticket recipe has no quota
+     step today, so a number would be a guess; and a site with no recipe at all
+     still gets the explanation if the box it rings is called Class.
+
+     These describe the OPTIONS the page author printed. They never read, and
+     never repeat, what the user chose.
+     ------------------------------------------------------------------ */
+  optionsFull: {
+
+    'class': {
+      match: ['class'],
+      say: {
+        en: 'Sleeper is the cheapest, with a berth but no AC. 3AC and 2AC have AC and cost more.',
+        hi: 'स्लीपर सबसे सस्ता है, बर्थ है पर AC नहीं। 3AC और 2AC में AC है और पैसे ज़्यादा लगते हैं।',
+        te: 'స్లీపర్ అన్నిటికంటే చౌక, బెర్త్ ఉంటుంది కానీ AC ఉండదు. 3AC, 2AC లలో AC ఉంటుంది, డబ్బు ఎక్కువ.'
+      }
+    },
+
+    gender: {
+      /* Just the choices. The step instruction already says why it is asked
+         for, and hearing "it goes on the ticket" twice in one breath is worse
+         than not hearing it at all. */
+      match: ['gender'],
+      say: {
+        en: 'The choices are male, female or other.',
+        hi: 'विकल्प हैं: पुरुष, महिला या अन्य।',
+        te: 'ఆప్షన్లు: పురుషుడు, స్త్రీ లేదా ఇతర.'
+      }
+    },
+
+    quota: {
+      match: ['quota'],
+      say: {
+        en: 'General is the normal one. Tatkal is for the last minute and costs more. Senior Citizen is for older travellers.',
+        hi: 'जनरल सामान्य है। तत्काल आख़िरी समय के लिए है और महँगा है। सीनियर सिटिज़न बुज़ुर्गों के लिए है।',
+        te: 'జనరల్ సాధారణమైనది. తత్కాల్ చివరి నిమిషం కోసం, డబ్బు ఎక్కువ. సీనియర్ సిటిజన్ పెద్దవారి కోసం.'
+      }
+    }
+  },
+
+  /* ------------------------------------------------------------------
+     6. HOW TO READ A PAGE THAT IS A LIST
+
+     Said once per page, after the instruction. The results page is a wall of
+     rows, and "press Book" means nothing until you know what a row IS.
+     ------------------------------------------------------------------ */
+  pageHelp: {
+    results: {
+      en: 'Each row is one train. Look at the leaving time and the fare.',
+      hi: 'हर पंक्ति एक ट्रेन है। चलने का समय और किराया देखिए।',
+      te: 'ప్రతి వరుస ఒక ట్రైన్. బయలుదేరే టైం, ఛార్జి చూడండి.'
+    }
+  },
+
+  /* ------------------------------------------------------------------
      4. WORDS THE WEBSITE USES WITHOUT EXPLAINING THEM
 
      Said once per session, the first time the word turns up in something Daari
@@ -267,10 +329,12 @@ self.DAARI_GUIDANCE = {
           hi: 'अब यहाँ लिखिए कहाँ जाना है, तब दोनों के बीच की ट्रेनें मिलेंगी।',
           te: 'ఇప్పుడు మీరు ఎక్కడికి వెళ్తున్నారో ఇక్కడ టైప్ చేయండి, ఆ రెండు స్టేషన్ల మధ్య ట్రైన్లు కనిపిస్తాయి.'
         },
+        /* Short on purpose: the options text that follows it says what the
+           choices mean, which is the real "why" for this step. */
         2: {
-          en: 'Choose your class here. It decides the seat and the fare.',
-          hi: 'यहाँ क्लास चुनिए। सीट और किराया इससे तय होता है।',
-          te: 'ఇక్కడ క్లాస్ సెలెక్ట్ చేసుకోండి. సీటు, ఛార్జి ఇది నిర్ణయిస్తుంది.'
+          en: 'Choose your class here.',
+          hi: 'यहाँ क्लास चुनिए।',
+          te: 'ఇక్కడ క్లాస్ సెలెక్ట్ చేసుకోండి.'
         },
         3: {
           en: 'Press Search Trains. The next page will list the trains.',
@@ -278,9 +342,9 @@ self.DAARI_GUIDANCE = {
           te: 'Search Trains నొక్కండి. తర్వాత పేజీలో ట్రైన్ల లిస్ట్ వస్తుంది.'
         },
         4: {
-          en: 'Press Book next to the train you want. That picks this train.',
-          hi: 'जो ट्रेन चाहिए उसके आगे Book दबाइए। वही ट्रेन चुनी जाएगी।',
-          te: 'మీకు కావాల్సిన ట్రైన్ పక్కన Book నొక్కండి. అదే ట్రైన్ ఎంచుకుంటారు.'
+          en: 'Press Book next to the train you want.',
+          hi: 'जो ट्रेन चाहिए उसके आगे Book दबाइए।',
+          te: 'మీకు కావాల్సిన ట్రైన్ పక్కన Book నొక్కండి.'
         },
         5: {
           en: "Type the passenger's name here. It is printed on the ticket.",
@@ -330,10 +394,12 @@ self.DAARI_GUIDANCE = {
           hi: 'पहले स्क्रीन पर रकम देख लीजिए। Pay दबाकर अपना पिन आप ही डालिए।',
           te: 'ముందు స్క్రీన్ మీద మొత్తం చూడండి. Pay నొక్కి, మీ పిన్ మీరే టైప్ చేయండి.'
         },
+        /* The page intro already says the ticket is booked, so this does not
+           say it again -- it goes straight to the one thing to keep. */
         14: {
-          en: 'The ticket is booked. Your PNR is on the screen - keep that number.',
-          hi: 'टिकट बुक हो गया। आपका PNR स्क्रीन पर है - वह नंबर रख लीजिए।',
-          te: 'టికెట్ బుక్ అయింది. మీ PNR స్క్రీన్ మీద ఉంది - ఆ నంబర్ దగ్గర పెట్టుకోండి.'
+          en: 'Your PNR is on the screen - keep that number.',
+          hi: 'आपका PNR स्क्रीन पर है - वह नंबर रख लीजिए।',
+          te: 'మీ PNR స్క్రీన్ మీద ఉంది - ఆ నంబర్ దగ్గర పెట్టుకోండి.'
         }
       }
     }

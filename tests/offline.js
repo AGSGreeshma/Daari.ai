@@ -1984,6 +1984,200 @@ console.log('\n2o. Words the website never explains, explained once');
   aiFail = null;
   aiReply = null;
 }
+console.log('\n2p. FULL mode: what the choices mean, and how to read a list');
+{
+  /* A dropdown is the worst thing on a form for somebody who cannot read it:
+     the labels are abbreviations ("SL", "3A") and choosing wrong costs money
+     or a sleepless night. So in full mode Daari says what the choices mean.
+
+     No new page reading was added for this. The text is pre-written and keyed
+     by what the step is ABOUT, matched against the step's own labels -- which
+     is why it also works on a site with no recipe at all. */
+
+  const OPT = ctx.self.DAARI_GUIDANCE.optionsFull;
+  const HELP = ctx.self.DAARI_GUIDANCE.pageHelp;
+  const BOOK = ctx.self.DAARI_GUIDANCE.byTask['book-ticket'];
+  const TERMS = ctx.self.DAARI_GUIDANCE.terms;
+
+  const INDEX_ELEMENTS = [
+    { i: 0, tag: 'input', type: 'text', name: 'From station *', filled: true },
+    { i: 1, tag: 'input', type: 'text', name: 'To station *', filled: true },
+    { i: 2, tag: 'select', type: '', name: 'Class', filled: true },
+    { i: 3, tag: 'select', type: '', name: 'Quota', filled: true },
+    { i: 4, tag: 'button', type: 'submit', name: 'Search Trains', filled: false }
+  ];
+  const PASSENGER_ELEMENTS = [
+    { i: 0, tag: 'select', type: '', name: 'Gender *', filled: false },
+    { i: 1, tag: 'button', type: 'submit', name: 'Send OTP', filled: false }
+  ];
+
+  async function atStep(index, level, elements, url) {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    if (level) { storage.local.helpLevel = level; } else { delete storage.local.helpLevel; }
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+    const s = storage.session.daariSession;
+    s.stepIndex = index;
+    s.confirmedStep = index;
+    await chrome.storage.session.set({ daariSession: s });
+    return await call(Object.assign({ type: 'DAARI_PAGE_READY' },
+      page(url || SEARCH_URL, elements)));
+  }
+
+  // ---- the Class step says what the classes mean ----------------------
+  {
+    const step = await atStep(2, 'full', INDEX_ELEMENTS);
+    check('the Class step explains the choices',
+      step.say.indexOf(OPT['class'].say.en) > 0, true);
+    check('  after the instruction, not before it',
+      step.say.indexOf('Choose your class here.') <
+      step.say.indexOf(OPT['class'].say.en), true);
+    check('  and mentions the cheapest one by name',
+      step.say.indexOf('Sleeper') > 0, true);
+  }
+
+  // ---- light mode gets none of it -------------------------------------
+  {
+    const step = await atStep(2, 'light', INDEX_ELEMENTS);
+    check('light mode hears no option list',
+      step.say.indexOf(OPT['class'].say.en) >= 0, false);
+    check('  just the short step', step.say, 'Tap here to choose your class');
+  }
+
+  // ---- the Gender step too --------------------------------------------
+  {
+    const step = await atStep(7, 'full', PASSENGER_ELEMENTS,
+      'https://daari-ai.vercel.app/practice/passenger.html');
+    check('the Gender step lists its choices',
+      step.say.indexOf(OPT.gender.say.en) > 0, true);
+  }
+
+  // ---- and the options bring the word they use with them --------------
+  {
+    const step = await atStep(2, 'full', INDEX_ELEMENTS);
+    check('the class options use the word berth, so berth is explained',
+      step.say.indexOf(TERMS.berth.say.en) > 0, true);
+    check('  with the explanation LAST, after the choices',
+      step.say.indexOf(TERMS.berth.say.en) > step.say.indexOf(OPT['class'].say.en), true);
+  }
+
+  // ---- QUOTA: written, and fires wherever such a box exists -----------
+  {
+    /* There is no quota STEP in the book-ticket recipe, so this text cannot be
+       keyed by step number -- it is keyed by what the step is about. On a site
+       with no recipe, the name of the box being rung is the only clue, and it
+       is enough. */
+    const recipe = JSON.parse(fs.readFileSync(
+      path.join(EXT, 'recipes', 'practice-book-ticket.json'), 'utf8'));
+    const quotaSteps = recipe.steps.filter((s) =>
+      JSON.stringify(s.look_for || []).toLowerCase().indexOf('quota') !== -1);
+    check('the recipe has no quota step, so none is assumed', quotaSteps.length, 0);
+    check('  but the quota text is written and ready', !!OPT.quota.say.en, true);
+
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    storage.local.helpLevel = 'full';
+    aiFail = null;
+    aiReply = { elementIndex: 0, speech: 'Choose which quota you want',
+                done_when: 'value_changed', stopAndConfirm: false, confidence: 0.9 };
+    await call({ type: 'DAARI_START_FLOW',
+      url: 'https://example.com/book', goal: 'book a train', tabId: 1 });
+    const step = await call({ type: 'DAARI_PAGE_READY',
+      url: 'https://example.com/book', title: 'Book',
+      elements: [{ i: 0, tag: 'select', type: '', name: 'Quota', filled: false }] });
+    check('a Quota box on a site with no recipe gets the explanation',
+      step.say.indexOf(OPT.quota.say.en) > 0, true);
+    check('  and Tatkal, which it names, is explained too',
+      step.say.indexOf(TERMS.tatkal.say.en) > 0, true);
+    aiFail = 500;
+    aiReply = null;
+  }
+
+  // ---- the results page: orient, THEN act -----------------------------
+  {
+    const step = await atStep(4, 'full',
+      [{ i: 0, tag: 'button', type: 'submit', name: 'Book', filled: false }],
+      'https://daari-ai.vercel.app/practice/results.html');
+
+    const intro = step.say.indexOf(BOOK.pageIntro.results.en);
+    const help = step.say.indexOf(HELP.results.en);
+    const action = step.say.indexOf('Press Book next to the train you want');
+
+    check('the results page says what the page is', intro, 0);
+    check('  then how to read it', help > intro, true);
+    check('  and only THEN what to press', action > help, true);
+    check('  because "press Book" means nothing until a row is a train',
+      step.say.indexOf('Each row is one train') < action, true);
+  }
+
+  // ---- the list help is said once, not on every row -------------------
+  {
+    storage.session = {}; chrome.storage.session = makeArea(storage.session);
+    storage.local.lang = 'en';
+    storage.local.helpLevel = 'full';
+    aiFail = 500;
+    await call({ type: 'DAARI_START_FLOW', url: START_URL, goal: 'book a train ticket', tabId: 1 });
+    const s = storage.session.daariSession;
+    s.stepIndex = 4;
+    s.confirmedStep = 4;
+    await chrome.storage.session.set({ daariSession: s });
+    const RESULTS = [{ i: 0, tag: 'button', type: 'submit', name: 'Book', filled: false }];
+    const RES_URL = 'https://daari-ai.vercel.app/practice/results.html';
+
+    const first = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(RES_URL, RESULTS)));
+    check('the first arrival explains the list', first.say.indexOf(HELP.results.en) > 0, true);
+
+    /* Arriving again -- a reload, or the page reporting in twice. */
+    const second = await call(Object.assign({ type: 'DAARI_PAGE_READY' }, page(RES_URL, RESULTS)));
+    check('arriving again does not explain it again',
+      second.say.indexOf(HELP.results.en) >= 0, false);
+    check('  but still says what to press',
+      second.say.indexOf('Press Book next to the train you want') >= 0, true);
+  }
+
+  // ---- "class" must not be found inside another word ------------------
+  {
+    /* The matcher needs a non-letter either side of a Latin term. Without it,
+       a box called "Classic fare" would get the carriage-class lecture. */
+    const step = await atStep(0, 'full', [
+      { i: 0, tag: 'input', type: 'text', name: 'Classic fare code', filled: false },
+      { i: 1, tag: 'input', type: 'text', name: 'From station *', filled: false }
+    ]);
+    check('"Classic" does not trigger the class explanation',
+      step.say.indexOf(OPT['class'].say.en) >= 0, false);
+  }
+
+  // ---- the written text is complete, and reads no choices -------------
+  {
+    let bad = [];
+    Object.keys(OPT).forEach((key) => {
+      if (!(OPT[key].match || []).length) { bad.push(key + ': nothing to match on'); }
+      ['te', 'hi', 'en'].forEach((code) => {
+        const text = OPT[key].say && OPT[key].say[code];
+        if (!text || !String(text).trim()) { bad.push(key + '.' + code + ': missing'); }
+        if (text && (String(text).indexOf('{') !== -1 ||
+                     String(text).indexOf('%s') !== -1)) {
+          bad.push(key + '.' + code + ': has a slot in it');
+        }
+      });
+    });
+    ['te', 'hi', 'en'].forEach((code) => {
+      if (!HELP.results || !HELP.results[code]) { bad.push('pageHelp.results.' + code + ': missing'); }
+    });
+    check('class, gender and quota are all explained in all three languages',
+      bad.join(' | '), '');
+
+    /* These describe the options the page author printed. Nothing here reads,
+       or repeats, what the user chose -- there is no slot for it to go in. */
+    check('and none of them has anywhere to put a chosen value',
+      bad.filter((b) => b.indexOf('slot') !== -1).length, 0);
+  }
+
+  delete storage.local.helpLevel;
+  aiFail = null;
+  aiReply = null;
+}
 console.log('\n3. The AI path: model agrees with the recipe');
 {
   storage.session = {}; chrome.storage.session = makeArea(storage.session);

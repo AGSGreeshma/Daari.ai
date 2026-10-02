@@ -185,29 +185,70 @@ function stepSentence(recipe, recipeStep, stepIndex, lang, helpLevel) {
    Returns the term keys found, in the order they are declared, so two new
    words in one sentence come out in a stable order rather than whatever order
    the sentence happened to use. */
+function mentions(text, needles) {
+  if (!text) { return false; }
+  var subject = String(text);
+  var lower = subject.toLowerCase();
+
+  return (needles || []).some(function (needle) {
+    if (!needle) { return false; }
+    if (/^[a-z]+$/i.test(needle)) {
+      /* A Latin word: require a non-letter on both sides, so "otp" is not
+         found inside another word and "class" is not found inside "classic". */
+      var want = String(needle).toLowerCase();
+      var at = lower.indexOf(want);
+      while (at !== -1) {
+        var before = at === 0 ? '' : lower.charAt(at - 1);
+        var after = lower.charAt(at + want.length);
+        if (!/[a-z]/.test(before) && !/[a-z]/.test(after)) { return true; }
+        at = lower.indexOf(want, at + 1);
+      }
+      return false;
+    }
+    return subject.indexOf(needle) !== -1;
+  });
+}
+
 function termsIn(sentence) {
   var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.terms;
   if (!all || !sentence) { return []; }
 
-  var text = String(sentence);
-  var lower = text.toLowerCase();
-
   return Object.keys(all).filter(function (key) {
-    return (all[key].match || []).some(function (needle) {
-      if (/^[a-z]+$/i.test(needle)) {
-        /* A Latin word: require a non-letter on both sides. */
-        var at = lower.indexOf(needle.toLowerCase());
-        while (at !== -1) {
-          var before = at === 0 ? '' : lower.charAt(at - 1);
-          var after = lower.charAt(at + needle.length);
-          if (!/[a-z]/.test(before) && !/[a-z]/.test(after)) { return true; }
-          at = lower.indexOf(needle.toLowerCase(), at + 1);
-        }
-        return false;
-      }
-      return text.indexOf(needle) !== -1;
-    });
+    return mentions(sentence, all[key].match);
   });
+}
+
+/* In full mode, say what the choices in a dropdown mean, after the
+   instruction.
+
+   Matched on the step's own labels, and on the name of the element being rung
+   when there is no recipe. Both are the page author's words, never the user's.
+
+   Deliberately not once-per-session: unlike a definition, this is about the
+   box in front of you, and somebody returning to the Class dropdown wants to
+   hear the choices again. */
+function withOptions(sentence, recipeStep, elements, index, lang, helpLevel) {
+  if (helpLevel !== 'full' || !sentence) { return sentence; }
+
+  var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.optionsFull;
+  if (!all) { return sentence; }
+
+  var labels = [].concat((recipeStep && recipeStep.look_for) || []);
+  var ringed = (index !== undefined && index !== -1 && elements && elements[index])
+    ? elements[index].name
+    : '';
+  if (ringed) { labels.push(ringed); }
+  if (!labels.length) { return sentence; }
+
+  var haystack = labels.join(' ');
+  var found = Object.keys(all).filter(function (key) {
+    return mentions(haystack, all[key].match) && all[key].say && all[key].say[lang];
+  });
+  if (!found.length) { return sentence; }
+
+  return sentence + ' ' + found.map(function (key) {
+    return self.DAARI_T(all[key].say, lang);
+  }).join(' ');
 }
 
 /* Explain any unexplained word, once per session, after the instruction.
@@ -247,18 +288,47 @@ function explainTerms(sentence, session, lang, helpLevel) {
 
    Once per page per session. Somebody who goes back a page does not need to be
    told again what they are looking at. */
-function withPageIntro(sentence, recipe, recipeStep, session, lang, helpLevel) {
-  if (helpLevel !== 'full' || !recipeStep || !recipeStep.page) { return sentence; }
+function pageIntroFor(recipe, recipeStep, session, lang, helpLevel) {
+  if (helpLevel !== 'full' || !recipeStep || !recipeStep.page) { return ''; }
 
   var g = guidanceFor(recipe);
   var intro = g && g.pageIntro && g.pageIntro[recipeStep.page];
-  if (!intro || !intro[lang]) { return sentence; }
+  if (!intro || !intro[lang]) { return ''; }
 
   session.introduced = session.introduced || [];
-  if (session.introduced.indexOf(recipeStep.page) !== -1) { return sentence; }
+  if (session.introduced.indexOf(recipeStep.page) !== -1) { return ''; }
   session.introduced.push(recipeStep.page);
 
-  return self.DAARI_T(intro, lang) + ' ' + sentence;
+  return self.DAARI_T(intro, lang);
+}
+
+/* How to read a page that is a list -- once per page.
+
+   Order matters. "Press Book next to the train you want" means nothing until
+   you know that each row IS a train, so this comes before the instruction. */
+function pageHelpFor(recipeStep, session, lang, helpLevel) {
+  if (helpLevel !== 'full' || !recipeStep || !recipeStep.page) { return ''; }
+
+  var all = self.DAARI_GUIDANCE && self.DAARI_GUIDANCE.pageHelp;
+  var help = all && all[recipeStep.page];
+  if (!help || !help[lang]) { return ''; }
+
+  session.pageHelped = session.pageHelped || [];
+  if (session.pageHelped.indexOf(recipeStep.page) !== -1) { return ''; }
+  session.pageHelped.push(recipeStep.page);
+
+  return self.DAARI_T(help, lang);
+}
+
+/* Everything the user hears before the instruction, in order: what this page
+   is for, then how to read it if it is a list. Each once per page per session,
+   and each simply absent when nothing is written for that page. */
+function pagePrefix(sentence, recipe, recipeStep, session, lang, helpLevel) {
+  return [
+    pageIntroFor(recipe, recipeStep, session, lang, helpLevel),
+    pageHelpFor(recipeStep, session, lang, helpLevel),
+    sentence
+  ].filter(function (part) { return part; }).join(' ');
 }
 
 async function recipeFor(session) {
@@ -506,7 +576,7 @@ async function decideStep(session, page) {
       return payload;
     }
 
-    payload.say = explainTerms(withPageIntro(
+    payload.say = explainTerms(pagePrefix(
       stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel),
       recipe, recipeStep, session, lang, helpLevel), session, lang, helpLevel);
     payload.path = 'recipe';
@@ -601,7 +671,7 @@ async function decideStep(session, page) {
        thing every time. The model still chose the element, and the validation
        gate above still had to agree with the recipe before we got here --
        only the words are ours. */
-    payload.say = withPageIntro(
+    payload.say = pagePrefix(
       (helpLevel === 'full' && recipeStep)
         ? stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel)
         : ai.speech,
@@ -620,7 +690,7 @@ async function decideStep(session, page) {
 
   } else if (recipeStep && recipeIndex !== -1) {
     payload.index = recipeIndex;
-    payload.say = withPageIntro(
+    payload.say = pagePrefix(
       stepSentence(recipe, recipeStep, session.stepIndex, lang, helpLevel),
       recipe, recipeStep, session, lang, helpLevel);
     payload.done_when = recipeStep.done_when || 'clicked';
@@ -666,11 +736,15 @@ async function decideStep(session, page) {
      the helper when the worker says the ringed box is a station box. */
   session.stationBox = !!payload.stationBox;
 
-  /* The last thing done to the sentence, so a word is explained whether it
-     came from the recipe, from full mode, or from the model. The gate and the
-     "I am not sure" voice return before this point and are left alone: a stop
-     is not the moment for a vocabulary lesson. */
-  payload.say = explainTerms(payload.say, session, lang, helpLevel);
+  /* The last thing done to the sentence, in the order the user hears it:
+     what this page is (prepended earlier), what to do, what the choices mean,
+     how to read the page, and then any word the site never explained.
+
+     The gate and the "I am not sure" voice return before this point and are
+     left alone: a stop is not the moment for a vocabulary lesson. */
+  payload.say = explainTerms(
+    withOptions(payload.say, recipeStep, elements, payload.index, lang, helpLevel),
+    session, lang, helpLevel);
 
   rememberPath(session, payload);
 
